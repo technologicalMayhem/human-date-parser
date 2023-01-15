@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+description: "Input: a month ago"
+---
+Ago > Duration > SingleUnit > Month: "month "

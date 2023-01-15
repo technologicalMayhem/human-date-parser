@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+description: "Input: 2022-11-07 13:25"
+---
+DateTime
+  - Date > IsoDate: "2022-11-07"
+  - Time: "13:25"

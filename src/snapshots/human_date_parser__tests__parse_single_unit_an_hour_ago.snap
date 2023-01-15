@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+description: "Input: an hour ago"
+---
+Ago > Duration > SingleUnit > Hour: "hour "

@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+description: "Input: in 3 days"
+---
+In > Duration > Quantifier
+  - Num: "3"
+  - Day: "days"

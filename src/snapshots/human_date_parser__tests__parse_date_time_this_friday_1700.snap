@@ -1,0 +1,9 @@
+---
+source: src/lib.rs
+description: "Input: this friday 17:00"
+---
+DateTime
+  - Date
+    - RelativeSpecifier > This: "this"
+    - Weekday > Friday: "friday"
+  - Time: "17:00"

@@ -1,0 +1,11 @@
+---
+source: src/lib.rs
+description: "Input: 10 hours and 5 minutes ago"
+---
+Ago > Duration
+  - Quantifier
+    - Num: "10"
+    - Hour: "hours"
+  - Quantifier
+    - Num: "5"
+    - Minute: "minutes"

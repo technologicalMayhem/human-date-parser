@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+description: "Input: yesterday"
+---
+Date > Yesterday: "yesterday"

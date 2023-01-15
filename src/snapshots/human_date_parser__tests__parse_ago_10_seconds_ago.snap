@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+description: "Input: 10 seconds ago"
+---
+Ago > Duration > Quantifier
+  - Num: "10"
+  - Second: "seconds"

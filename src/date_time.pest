@@ -1,0 +1,193 @@
+HumanTime = _{
+    | DateTime
+    | Date
+    | Time
+    // | After
+    // | From
+    | In
+    // | Before
+    | Ago
+    | Now
+}
+
+DateTime = {
+    | Date ~ ("at")? ~ Time
+    | Time ~ (",")? ~ Date
+    // | RelativeSpecifier ~ TimeUnit
+}
+IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
+Date = {
+    | Today
+    | Tommorow
+    | Yesterday
+    | IsoDate
+    | Num ~ Num ~ Num
+    | Num ~ Month_Name ~ Num
+    | Num ~ Month_Name
+    | RelativeSpecifier ~ Weekday
+    | Weekday
+}
+
+Today = { "today" }
+Tommorow = { "tommorow" }
+Yesterday = { "yesterday" }
+
+Time = @{ 
+    | Num ~ ( ":" ~ Num ){1,2}
+}
+
+// After = { Duration ~ "after" ~ HumanTime }
+// From = { Duration ~ "from" ~ HumanTime }
+In = { "in" ~ Duration }
+// Before = { Duration ~ "before" ~ HumanTime }
+Ago = { Duration ~ "ago" }
+Now = { "now" }
+
+Duration = {
+    | Quantifier ~ (("," | "and")? ~ Quantifier)*
+    | SingleUnit
+}
+
+SingleUnit = { Article ~ TimeUnit }
+
+Article = _{
+    | "an"
+    | "a"
+}
+
+
+RelativeSpecifier = {
+    | This
+    | Next
+    | Last
+}
+
+This = { "this" }
+Next = { "next" }
+Last = { "last" }
+
+Quantifier = { Num ~ TimeUnit }
+Num = @{ ASCII_DIGIT+ }
+TimeUnit = _{
+    | Year
+    | Month
+    | Week
+    | Day
+    | Hour
+    | Minute
+    | Second
+}
+
+Year = { "year" ~ ( "s" )? }
+Month = { "month" ~ ( "s" )? }
+Week = { "week" ~ ( "s" )? }
+Day = { "day" ~ ( "s" )? | "d" }
+Hour = { "hour" ~ ( "s" )? | "h" }
+Minute = { ("minute" | "min") ~ ( "s" )? | "m" }
+Second = { ("second" | "sec") ~ ( "s" )? | "s" }
+
+Weekday = {
+    | Monday
+    | Tuesday
+    | Wednesday
+    | Thursday
+    | Friday
+    | Saturday
+    | Sunday
+}
+
+Monday = {    
+    | "monday"
+    | "mon"    
+}
+Tuesday = {    
+    | "tuesday"
+    | "tue"    
+}
+Wednesday = {    
+    | "wednesday"
+    | "wed"    
+}
+Thursday = {    
+    | "thursday"
+    | "thu"    
+}
+Friday = {    
+    | "friday"
+    | "fri"    
+}
+Saturday = {    
+    | "saturday"
+    | "sat"    
+}
+Sunday = {    
+    | "sunday"
+    | "sun"    
+}
+
+Month_Name = {
+    | January
+    | February
+    | March
+    | April
+    | May
+    | June
+    | July
+    | August
+    | September
+    | October
+    | November
+    | December
+}
+
+January = {
+    | "january"
+    | "jan"
+}    
+February = {
+    | "february"
+    | "feb"
+}    
+March = {
+    | "march"
+    | "mar"
+}    
+April = {
+    | "april"
+    | "apr"
+}    
+May = {
+    | "may"
+    | "may"
+}    
+June = {
+    | "june"
+    | "jun"
+}    
+July = {
+    | "july"
+    | "jul"
+}    
+August = {
+    | "august"
+    | "aug"
+}    
+September = {
+    | "september"
+    | "sep"
+}    
+October = {
+    | "october"
+    | "oct"
+}    
+November = {
+    | "november"
+    | "nov"
+}    
+December = {
+    | "december"
+    | "dec"
+}
+
+
+WHITESPACE = _{ " " }

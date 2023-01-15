@@ -1,0 +1,26 @@
+---
+source: src/lib.rs
+description: "Input: 1 years, 2 months, 3 weeks, 5 days, 8 hours, 17 minutes and 45 seconds ago"
+---
+Ago > Duration
+  - Quantifier
+    - Num: "1"
+    - Year: "years"
+  - Quantifier
+    - Num: "2"
+    - Month: "months"
+  - Quantifier
+    - Num: "3"
+    - Week: "weeks"
+  - Quantifier
+    - Num: "5"
+    - Day: "days"
+  - Quantifier
+    - Num: "8"
+    - Hour: "hours"
+  - Quantifier
+    - Num: "17"
+    - Minute: "minutes"
+  - Quantifier
+    - Num: "45"
+    - Second: "seconds"

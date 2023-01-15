@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+description: "Input: a week ago"
+---
+Ago > Duration > SingleUnit > Week: "week "

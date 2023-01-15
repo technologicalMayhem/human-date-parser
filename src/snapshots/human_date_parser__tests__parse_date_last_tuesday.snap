@@ -1,0 +1,7 @@
+---
+source: src/lib.rs
+description: "Input: last tuesday"
+---
+Date
+  - RelativeSpecifier > Last: "last"
+  - Weekday > Tuesday: "tuesday"

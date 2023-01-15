@@ -1,0 +1,8 @@
+---
+source: src/lib.rs
+description: "Input: 1 2 2020"
+---
+Date
+  - Num: "1"
+  - Num: "2"
+  - Num: "2020"
