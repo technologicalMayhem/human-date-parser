@@ -1,5 +1,7 @@
-use chrono::{Local, DateTime};
-use pest::Parser;
+use std::ops::Add;
+
+use chrono::{DateTime, Datelike, Duration, Local};
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use thiserror::Error;
 
@@ -10,17 +12,162 @@ struct DateTimeParser;
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("The data has a invalid format")]
-    InvalidFormat
+    InvalidFormat,
+    #[error("The amount {amount} is invalid.")]
+    ValueInvalid { amount: String },
 }
 
-impl DateTimeParser {
-    pub fn parse_date_time(str: &str) -> Result<DateTime<Local>, ParseError> {
-        let parsed = match DateTimeParser::parse(Rule::HumanTime, str) {
-            Ok(parsed) => {parsed},
-            Err(_) => {return Err(ParseError::InvalidFormat)},
-        };
+struct CollectedTimeData {
+    date_time: Option<DateTime<Local>>,
+    durations: Vec<Duration>,
+}
 
-    } 
+impl CollectedTimeData {
+    fn new() -> Self {
+        CollectedTimeData {
+            date_time: None,
+            durations: Vec::new(),
+        }
+    }
+}
+
+pub fn parse_date_time(str: &str) -> Result<DateTime<Local>, ParseError> {
+    let lowercase = str.to_lowercase();
+    let mut parsed = match DateTimeParser::parse(Rule::HumanTime, &lowercase) {
+        Ok(parsed) => parsed,
+        Err(_) => return Err(ParseError::InvalidFormat),
+    };
+
+    let head = parsed.next().unwrap();
+    let mut data = CollectedTimeData::new();
+    let rule = head.as_rule();
+    let result: DateTime<Local> = match rule {
+        Rule::DateTime => {
+            todo!()
+        }
+        Rule::Date => {
+            todo!()
+        }
+        Rule::Time => {
+            todo!()
+        }
+        Rule::In | Rule::Ago => {
+            collect_durations(head.into_inner().next().unwrap(), &mut data)?;
+            let mut dur = Duration::zero();
+            for ele in data.durations {
+                dur = dur.add(ele);
+            }
+            match rule {
+                Rule::In => Local::now() + dur,
+                Rule::Ago => Local::now() - dur,
+                _ => unreachable!(),
+            }
+        }
+        Rule::Now => Local::now(),
+        _ => unreachable!(),
+    };
+
+    Ok(result)
+}
+
+fn collect_durations(
+    duration_rule: Pair<Rule>,
+    data: &mut CollectedTimeData,
+) -> Result<(), ParseError> {
+    for rule in duration_rule.into_inner() {
+        match rule.as_rule() {
+            Rule::Quantifier => {
+                for inner in rule.into_inner() {
+                    let mut amount: i64 = 0;
+                    let mut rule = Rule::Minute;
+                    match inner.as_rule() {
+                        Rule::Num => {
+                            amount = match inner.as_str().parse() {
+                                Ok(num) => num,
+                                Err(_) => {
+                                    return Err(ParseError::ValueInvalid {
+                                        amount: inner.as_str().into(),
+                                    })
+                                }
+                            }
+                        }
+                        Rule::TimeUnit => rule = inner.into_inner().next().unwrap().as_rule(),
+                        _ => unreachable!(),
+                    }
+
+                    data.durations.push(create_duration(rule, amount)?);
+                }
+            }
+            Rule::SingleUnit => {
+                for inner in rule.into_inner() {
+                    if inner.as_rule() == Rule::TimeUnit {
+                        data.durations.push(create_duration(
+                            inner.into_inner().next().unwrap().as_rule(),
+                            1,
+                        )?);
+                    }
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(())
+}
+
+fn create_duration(rule: Rule, amount: i64) -> Result<Duration, ParseError> {
+    let dur = match rule {
+        Rule::Year => {
+            let now = Local::now();
+            let years: i32 = match amount.try_into() {
+                Ok(years) => years,
+                Err(_) => {
+                    return Err(ParseError::ValueInvalid {
+                        amount: amount.to_string(),
+                    })
+                }
+            };
+            let next_year = match now.with_year(now.year() + years) {
+                Some(year) => year,
+                None => {
+                    return Err(ParseError::ValueInvalid {
+                        amount: amount.to_string(),
+                    })
+                }
+            };
+
+            next_year - now
+        }
+        Rule::Month => {
+            let now = Local::now();
+            let months: u32 = match amount.try_into() {
+                Ok(months) => months,
+                Err(_) => {
+                    return Err(ParseError::ValueInvalid {
+                        amount: amount.to_string(),
+                    })
+                }
+            };
+            let next_month = match now.with_month0((now.month0() + months) % 12) {
+                Some(month) => month,
+                None => {
+                    return Err(ParseError::ValueInvalid {
+                        amount: amount.to_string(),
+                    })
+                }
+            };
+
+            next_month - now
+        }
+        Rule::Week => Duration::days(amount * 7),
+        Rule::Day => Duration::days(amount),
+        Rule::Hour => Duration::hours(amount),
+        Rule::Minute => Duration::minutes(amount),
+        Rule::Second => Duration::seconds(amount),
+        _ => unreachable!(),
+    };
+
+    Ok(dur)
 }
 
 #[cfg(test)]
@@ -107,6 +254,8 @@ mod tests {
             _ => format!("{}{}{:?}\n{}", indent, dash, token, children.join("\n")),
         }
     }
+
+    //TODO: Write tests
 
     generate_test_cases!(
         date_time(

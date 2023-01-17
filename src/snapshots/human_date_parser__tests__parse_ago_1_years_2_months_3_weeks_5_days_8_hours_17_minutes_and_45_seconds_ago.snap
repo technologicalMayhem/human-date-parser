@@ -5,22 +5,22 @@ description: "Input: 1 years, 2 months, 3 weeks, 5 days, 8 hours, 17 minutes and
 Ago > Duration
   - Quantifier
     - Num: "1"
-    - Year: "years"
+    - TimeUnit > Year: "years"
   - Quantifier
     - Num: "2"
-    - Month: "months"
+    - TimeUnit > Month: "months"
   - Quantifier
     - Num: "3"
-    - Week: "weeks"
+    - TimeUnit > Week: "weeks"
   - Quantifier
     - Num: "5"
-    - Day: "days"
+    - TimeUnit > Day: "days"
   - Quantifier
     - Num: "8"
-    - Hour: "hours"
+    - TimeUnit > Hour: "hours"
   - Quantifier
     - Num: "17"
-    - Minute: "minutes"
+    - TimeUnit > Minute: "minutes"
   - Quantifier
     - Num: "45"
-    - Second: "seconds"
+    - TimeUnit > Second: "seconds"

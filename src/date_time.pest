@@ -2,10 +2,7 @@ HumanTime = _{
     | DateTime
     | Date
     | Time
-    // | After
-    // | From
     | In
-    // | Before
     | Ago
     | Now
 }
@@ -13,7 +10,6 @@ HumanTime = _{
 DateTime = {
     | Date ~ ("at")? ~ Time
     | Time ~ (",")? ~ Date
-    // | RelativeSpecifier ~ TimeUnit
 }
 IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
@@ -36,10 +32,7 @@ Time = @{
     | Num ~ ( ":" ~ Num ){1,2}
 }
 
-// After = { Duration ~ "after" ~ HumanTime }
-// From = { Duration ~ "from" ~ HumanTime }
 In = { "in" ~ Duration }
-// Before = { Duration ~ "before" ~ HumanTime }
 Ago = { Duration ~ "ago" }
 Now = { "now" }
 
@@ -68,7 +61,7 @@ Last = { "last" }
 
 Quantifier = { Num ~ TimeUnit }
 Num = @{ ASCII_DIGIT+ }
-TimeUnit = _{
+TimeUnit = {
     | Year
     | Month
     | Week

@@ -5,10 +5,10 @@ description: "Input: 2 hours, 32 minutes and 7 seconds ago"
 Ago > Duration
   - Quantifier
     - Num: "2"
-    - Hour: "hours"
+    - TimeUnit > Hour: "hours"
   - Quantifier
     - Num: "32"
-    - Minute: "minutes"
+    - TimeUnit > Minute: "minutes"
   - Quantifier
     - Num: "7"
-    - Second: "seconds"
+    - TimeUnit > Second: "seconds"

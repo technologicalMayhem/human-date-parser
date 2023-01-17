@@ -5,22 +5,22 @@ description: "Input: 1 year, 1 month, 1 week, 1 day, 1 hour, 1 minute and 1 seco
 Ago > Duration
   - Quantifier
     - Num: "1"
-    - Year: "year"
+    - TimeUnit > Year: "year"
   - Quantifier
     - Num: "1"
-    - Month: "month"
+    - TimeUnit > Month: "month"
   - Quantifier
     - Num: "1"
-    - Week: "week"
+    - TimeUnit > Week: "week"
   - Quantifier
     - Num: "1"
-    - Day: "day"
+    - TimeUnit > Day: "day"
   - Quantifier
     - Num: "1"
-    - Hour: "hour"
+    - TimeUnit > Hour: "hour"
   - Quantifier
     - Num: "1"
-    - Minute: "minute "
+    - TimeUnit > Minute: "minute "
   - Quantifier
     - Num: "1"
-    - Second: "second "
+    - TimeUnit > Second: "second "

@@ -2,4 +2,4 @@
 source: src/lib.rs
 description: "Input: a minute ago"
 ---
-Ago > Duration > SingleUnit > Minute: "minute "
+Ago > Duration > SingleUnit > TimeUnit > Minute: "minute "

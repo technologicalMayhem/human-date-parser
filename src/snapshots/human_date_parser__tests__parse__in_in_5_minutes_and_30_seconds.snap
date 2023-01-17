@@ -5,7 +5,7 @@ description: "Input: in 5 minutes and 30 seconds"
 In > Duration
   - Quantifier
     - Num: "5"
-    - Minute: "minutes"
+    - TimeUnit > Minute: "minutes"
   - Quantifier
     - Num: "30"
-    - Second: "seconds"
+    - TimeUnit > Second: "seconds"

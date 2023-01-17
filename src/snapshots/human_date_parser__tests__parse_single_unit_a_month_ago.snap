@@ -2,4 +2,4 @@
 source: src/lib.rs
 description: "Input: a month ago"
 ---
-Ago > Duration > SingleUnit > Month: "month "
+Ago > Duration > SingleUnit > TimeUnit > Month: "month "

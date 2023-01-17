@@ -4,4 +4,4 @@ description: "Input: in 2 hours"
 ---
 In > Duration > Quantifier
   - Num: "2"
-  - Hour: "hours"
+  - TimeUnit > Hour: "hours"
