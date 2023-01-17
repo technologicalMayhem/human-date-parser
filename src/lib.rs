@@ -1,24 +1,26 @@
-use pest::{
-    Parser,
-};
-
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
+use chrono::{Local, DateTime};
+use pest::Parser;
+use pest_derive::Parser;
+use thiserror::Error;
 
 #[derive(Parser)]
 #[grammar = "date_time.pest"]
 struct DateTimeParser;
 
-pub fn parse(str: &str) -> ! {
-    let _parsed = match DateTimeParser::parse(Rule::HumanTime, str) {
-        Ok(parsed) => parsed,
-        Err(_) => {
-            panic!("Could not parse!")
-        }
-    };
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("The data has a invalid format")]
+    InvalidFormat
+}
 
-    todo!();
+impl DateTimeParser {
+    pub fn parse_date_time(str: &str) -> Result<DateTime<Local>, ParseError> {
+        let parsed = match DateTimeParser::parse(Rule::HumanTime, str) {
+            Ok(parsed) => {parsed},
+            Err(_) => {return Err(ParseError::InvalidFormat)},
+        };
+
+    } 
 }
 
 #[cfg(test)]

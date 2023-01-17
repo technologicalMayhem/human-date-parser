@@ -9,6 +9,7 @@ edition = "2021"
 chrono = "0.4"
 pest = "2"
 pest_derive = "2"
+thiserror = "1.0.38"
 
 [dev-dependencies]
 concat-idents = { git = "https://github.com/technologicalMayhem/concat-idents" }
