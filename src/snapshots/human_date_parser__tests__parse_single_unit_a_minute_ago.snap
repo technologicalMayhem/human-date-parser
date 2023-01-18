@@ -1,5 +1,0 @@
----
-source: src/lib.rs
-description: "Input: a minute ago"
----
-Ago > Duration > SingleUnit > TimeUnit > Minute: "minute "

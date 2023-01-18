@@ -1,9 +1,0 @@
----
-source: src/lib.rs
-description: "Input: last friday at 19:45"
----
-DateTime
-  - Date
-    - RelativeSpecifier > Last: "last"
-    - Weekday > Friday: "friday"
-  - Time: "19:45"

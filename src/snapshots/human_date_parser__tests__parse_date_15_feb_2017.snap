@@ -1,8 +1,0 @@
----
-source: src/lib.rs
-description: "Input: 15 feb 2017"
----
-Date
-  - Num: "15"
-  - Month_Name > February: "feb"
-  - Num: "2017"

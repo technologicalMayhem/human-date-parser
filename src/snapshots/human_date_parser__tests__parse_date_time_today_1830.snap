@@ -1,7 +1,0 @@
----
-source: src/lib.rs
-description: "Input: today 18:30"
----
-DateTime
-  - Date > Today: "today"
-  - Time: "18:30"

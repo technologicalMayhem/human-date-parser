@@ -1,9 +1,0 @@
----
-source: src/lib.rs
-description: "Input: 13:25, next tuesday"
----
-DateTime
-  - Time: "13:25"
-  - Date
-    - RelativeSpecifier > Next: "next"
-    - Weekday > Tuesday: "tuesday"

@@ -1,7 +1,5 @@
 HumanTime = _{
     | DateTime
-    | Date
-    | Time
     | In
     | Ago
     | Now
@@ -17,7 +15,6 @@ Date = {
     | Tommorow
     | Yesterday
     | IsoDate
-    | Num ~ Num ~ Num
     | Num ~ Month_Name ~ Num
     | Num ~ Month_Name
     | RelativeSpecifier ~ Weekday

@@ -1,7 +1,0 @@
----
-source: src/lib.rs
-description: "Input: 15:20 friday"
----
-DateTime
-  - Time: "15:20"
-  - Date > Weekday > Friday: "friday"
