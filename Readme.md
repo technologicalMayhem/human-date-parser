@@ -19,7 +19,7 @@ You can also use the example to try out a few dates and see what it can and can'
 
 ## Formats
 
-Currently the following kind of formats are supported:
+Currently the following kinds of formats are supported:
 
 - Today 18:30
 - 2022-11-07 13:25:30
