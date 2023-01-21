@@ -49,10 +49,20 @@ macro_rules! now {
 }
 
 /// Converts a human expression of a date into a more usable one.
-///
+/// 
 /// # Errors
 ///
 /// This function will return an error if the string contains values than can not be parsed into a date.
+/// 
+/// # Examples
+/// ```
+/// use human_date_parser::from_human_time;
+///
+/// fn main() {
+///     let date = from_human_time("Last Friday at 19:45").unwrap();
+///     println!("{date}");
+/// }
+/// ```
 pub fn from_human_time(str: &str) -> Result<DateTime<Local>, ParseError> {
     let lowercase = str.to_lowercase();
     let mut parsed = match DateTimeParser::parse(Rule::HumanTime, &lowercase) {
