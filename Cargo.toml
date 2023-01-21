@@ -1,9 +1,12 @@
 [package]
 name = "human-date-parser"
+description = "Parses strings that express dates in a human way into ones usable by code."
+license = "MIT"
+homepage = "https://github.com/technologicalMayhem/human-date-parser"
+repository = "https://github.com/technologicalMayhem/human-date-parser"
+readme = "Readme.md"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 chrono = "0.4"
