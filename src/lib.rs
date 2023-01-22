@@ -136,7 +136,7 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
 
     match first.as_rule() {
         Rule::Today => Ok(now!().date_naive()),
-        Rule::Tommorow => Ok(now!().add(Duration::days(1)).date_naive()),
+        Rule::Tomorrow => Ok(now!().add(Duration::days(1)).date_naive()),
         Rule::Yesterday => Ok(now!().sub(Duration::days(1)).date_naive()),
         Rule::IsoDate => {
             let from_str = NaiveDate::from_str(first.as_str()).unwrap();

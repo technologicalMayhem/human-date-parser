@@ -12,7 +12,7 @@ DateTime = {
 IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
     | Today
-    | Tommorow
+    | Tomorrow
     | Yesterday
     | IsoDate
     | Num ~ Month_Name ~ Num
@@ -22,7 +22,7 @@ Date = {
 }
 
 Today = { "today" }
-Tommorow = { "tommorow" }
+Tomorrow = { "tomorrow" }
 Yesterday = { "yesterday" }
 
 Time = @{ 
