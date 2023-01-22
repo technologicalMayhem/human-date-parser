@@ -48,22 +48,31 @@ macro_rules! now {
     };
 }
 
+pub enum ParseResult {
+    DateTime(DateTime<Local>),
+    Date(NaiveDate),
+    Time(NaiveTime),
+}
+
 /// Converts a human expression of a date into a more usable one.
-/// 
+///
 /// # Errors
 ///
 /// This function will return an error if the string contains values than can not be parsed into a date.
-/// 
+///
 /// # Examples
 /// ```
-/// use human_date_parser::from_human_time;
+/// use human_date_parser::{from_human_time, ParseResult};
 ///
 /// fn main() {
 ///     let date = from_human_time("Last Friday at 19:45").unwrap();
-///     println!("{date}");
+///     match date {
+///         ParseResult::DateTime(date) => println!("{date}"),
+///         _ => unreachable!()
+///     }
 /// }
 /// ```
-pub fn from_human_time(str: &str) -> Result<DateTime<Local>, ParseError> {
+pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
     let lowercase = str.to_lowercase();
     let mut parsed = match DateTimeParser::parse(Rule::HumanTime, &lowercase) {
         Ok(parsed) => parsed,
@@ -72,10 +81,12 @@ pub fn from_human_time(str: &str) -> Result<DateTime<Local>, ParseError> {
 
     let head = parsed.next().unwrap();
     let rule = head.as_rule();
-    let result: DateTime<Local> = match rule {
-        Rule::DateTime => parse_datetime(head)?,
-        Rule::In | Rule::Ago => parse_in_or_ago(head, rule)?,
-        Rule::Now => now!(),
+    let result: ParseResult = match rule {
+        Rule::DateTime => ParseResult::DateTime(parse_datetime(head)?),
+        Rule::Date => ParseResult::Date(parse_date(head)?),
+        Rule::Time => ParseResult::Time(parse_time(head)?),
+        Rule::In | Rule::Ago => ParseResult::DateTime(parse_in_or_ago(head, rule)?),
+        Rule::Now => ParseResult::DateTime(now!()),
         _ => unreachable!(),
     };
 
@@ -409,6 +420,12 @@ mod tests {
                         let input = $case.to_lowercase();
                         let result = from_human_time(&input).unwrap();
                         let expected = NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S").unwrap().and_local_timezone(Local).unwrap();
+
+                        let result = match result {
+                            ParseResult::DateTime(datetime) => datetime,
+                            ParseResult::Date(date) => NaiveDateTime::new(date, now!().time()).and_local_timezone(Local).unwrap(),
+                            ParseResult::Time(time) => NaiveDateTime::new(now!().date_naive(), time).and_local_timezone(Local).unwrap(),
+                        };
 
                         println!("Result: {result}\nExpected: {expected}\nNote: Maximum difference between these values allowed is 10ms.");
                         assert!(result - expected < Duration::milliseconds(10));

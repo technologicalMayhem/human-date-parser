@@ -1,5 +1,7 @@
 HumanTime = _{
     | DateTime
+    | Date
+    | Time
     | In
     | Ago
     | Now
