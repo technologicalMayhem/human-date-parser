@@ -1,7 +1,7 @@
 HumanTime = _{
     | DateTime
     | Date
-    | Time
+    | ("at")? ~ Time
     | In
     | Ago
     | Now

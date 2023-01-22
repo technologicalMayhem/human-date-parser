@@ -1,12 +1,13 @@
 use std::io::stdin;
 
-use chrono::{Local, NaiveDateTime};
+use chrono::Local;
 use human_date_parser::ParseResult;
 
 fn main() {
     let mut buffer = String::new();
     let stdin = stdin();
 
+    println!("Describe a date or time:");
     loop {
         buffer.clear();
         stdin.read_line(&mut buffer).unwrap();
@@ -20,17 +21,13 @@ fn main() {
 
         let now = Local::now();
 
-        let result = match result {
-            ParseResult::DateTime(datetime) => datetime,
-            ParseResult::Date(date) => NaiveDateTime::new(date, now.time())
-                .and_local_timezone(Local)
-                .unwrap(),
-            ParseResult::Time(time) => NaiveDateTime::new(now.date_naive(), time)
-                .and_local_timezone(Local)
-                .unwrap(),
+        match result {
+            ParseResult::DateTime(datetime) => {
+                println!("Time now: {now}");
+                println!("Time then: {datetime}\n");
+            }
+            ParseResult::Date(date) => println!("Date: {date}\n"),
+            ParseResult::Time(time) => println!("Time: {time}\n"),
         };
-
-        println!("Time now: {now}");
-        println!("Calculated: {result}\n");
     }
 }
