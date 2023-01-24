@@ -7,7 +7,10 @@ use std::{
 use chrono::{
     DateTime, Datelike, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Weekday,
 };
-use pest::{iterators::{Pair, Pairs}, Parser};
+use pest::{
+    iterators::Pair,
+    Parser,
+};
 use pest_derive::Parser;
 use thiserror::Error;
 
@@ -54,37 +57,22 @@ pub enum ParseResult {
     Time(NaiveTime),
 }
 
-trait FindRule<'i> {
-    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>>;
-    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>>;
+trait PairHelper<'a> {
+    fn vec(self) -> Vec<Pair<'a, Rule>>;
+    fn clone_vec(&self) -> Vec<Pair<'a, Rule>>;
 }
-
-impl<'i> FindRule<'i> for Pairs<'i, Rule> {
-    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>> {
-        self.to_owned().find(|x| x.as_rule() == rule)
-    }
-
-    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>> {
-        let s = self.to_owned();
-        let mut vec: Vec<Pair<Rule>> = Vec::new();
-        for pair in s {
-            if pair.as_rule() == rule {
-                vec.push(pair);
-            }
-        }
-
-        vec
-    }
-}
-
-trait ToVec<'a> {
-    fn to_vec(self) -> Vec<Pair<'a, Rule>>;
-}
-
-impl<'a> ToVec<'a> for Pair<'a, Rule> {
-    fn to_vec(self) -> Vec<Pair<'a, Rule>> {
+impl<'a> PairHelper<'a> for Pair<'a, Rule> {
+    fn vec(self) -> Vec<Pair<'a, Rule>> {
         self.into_inner().collect()
     }
+
+    fn clone_vec(&self) -> Vec<Pair<'a, Rule>> {
+        self.clone().into_inner().collect()
+    }
+}
+
+fn rules<'a>(v: &Vec<Pair<'a, Rule>>) -> Vec<Rule> {
+    v.iter().map(|pair| pair.as_rule()).collect()
 }
 
 /// Converts a human expression of a date into a more usable one.
@@ -175,22 +163,22 @@ fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, Pars
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a `NaiveDate`.
 fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
-    let inner_pairs: Vec<Pair<Rule>> = pair.to_vec();
-    let first = inner_pairs.first().unwrap();
-
-    match first.as_rule() {
-        Rule::Today => Ok(now!().date_naive()),
-        Rule::Tomorrow => Ok(now!().add(Duration::days(1)).date_naive()),
-        Rule::Yesterday => Ok(now!().sub(Duration::days(1)).date_naive()),
-        Rule::IsoDate => {
-            let from_str = NaiveDate::from_str(first.as_str()).unwrap();
+    let date = pair.vec();
+    match rules(&date)[..] {
+        [Rule::Today] => Ok(now!().date_naive()),
+        [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
+        [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
+        [Rule::IsoDate] => {
+            let from_str = NaiveDate::from_str(date[0].as_str()).unwrap();
             Ok(from_str)
         }
-        Rule::Num => {
-            let day = parse_in_range(first.as_str(), 1, 31)?;
-            let mut month_name = inner_pairs.get(1).unwrap().clone().into_inner();
-            let month = month_from_rule(month_name.next().unwrap().as_rule()).number_from_month();
-            let year = match inner_pairs.get(2) {
+        [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
+            let day = parse_in_range(date[0].as_str(), 1, 31)?;
+
+            let month_rule = date[1].clone_vec()[0].as_rule();
+            let month = month_from_rule(month_rule).number_from_month();
+
+            let year = match date.get(2) {
                 Some(rule) => parse_in_range(rule.as_str(), 0, 10000)?,
                 None => now!().year(),
             };
@@ -201,15 +189,33 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
             };
             Ok(date)
         }
-        Rule::RelativeSpecifier => {
-            let specifier = first.clone().into_inner().next().unwrap().as_rule();
-            let weekday_rule = inner_pairs.get(1).unwrap().clone();
-            let specific_weekday = weekday_rule.into_inner().next().unwrap().as_rule();
+        [Rule::RelativeSpecifier, Rule::TimeUnit] => {
+            let unit = date[1].clone_vec()[0].as_rule();
+            let duration = create_duration(unit, 1)?;
+            match date[0].clone_vec()[0].as_rule() {
+                Rule::This => Ok(now!().date_naive()),
+                Rule::Next => Ok(now!().add(duration).date_naive()),
+                Rule::Last => Ok(now!().sub(duration).date_naive()),
+                _ => unreachable!(),
+            }
+        }
+        [Rule::RelativeSpecifier, Rule::Weekday] |
+        [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
+            let specifier = date[0].clone_vec()[0].as_rule();
+
+            let specific_weekday: Rule;
+            if date[1].as_rule() == Rule::Weekday {
+                specific_weekday = date[1].clone_vec()[0].as_rule();
+            }
+            else {
+                specific_weekday = date[2].clone_vec()[0].as_rule();
+            }
+
             let weekday = weekday_from_rule(specific_weekday);
             Ok(find_weekday(weekday, specifier))
         }
-        Rule::Weekday => {
-            let specific_weekday = first.clone().into_inner().next().unwrap().as_rule();
+        [Rule::Weekday] => {
+            let specific_weekday = date[0].clone_vec()[0].as_rule();
             let weekday = weekday_from_rule(specific_weekday);
             Ok(find_weekday(weekday, Rule::This))
         }
@@ -233,6 +239,8 @@ fn find_weekday(weekday: Weekday, rule: Rule) -> NaiveDate {
         days_to_add = (7 - (current - next)).into();
     }
 
+    // TODO: Change this so that 'Next Thursday' refer to the thursday in the next week, even if thursday of this week has already passed
+    // Right now if thursday has passed it will spit out the date for thursday two weeks ahead.
     match rule {
         Rule::This => {}
         Rule::Next => days_to_add += 7,

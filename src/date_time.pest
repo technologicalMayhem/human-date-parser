@@ -19,9 +19,9 @@ Date = {
     | IsoDate
     | Num ~ Month_Name ~ Num
     | Num ~ Month_Name
-    | RelativeSpecifier ~ Weekday
+    | RelativeSpecifier ~ Week ~ Weekday
     | RelativeSpecifier ~ TimeUnit
-    | RelativeSpecifier ~ TimeUnit ~ Weekday
+    | RelativeSpecifier ~ Weekday
     | Weekday
 }
 
