@@ -77,6 +77,16 @@ impl<'i> FindRule<'i> for Pairs<'i, Rule> {
     }
 }
 
+trait ToVec<'a> {
+    fn to_vec(self) -> Vec<Pair<'a, Rule>>;
+}
+
+impl<'a> ToVec<'a> for Pair<'a, Rule> {
+    fn to_vec(self) -> Vec<Pair<'a, Rule>> {
+        self.into_inner().collect()
+    }
+}
+
 /// Converts a human expression of a date into a more usable one.
 ///
 /// # Errors
@@ -165,7 +175,7 @@ fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, Pars
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a `NaiveDate`.
 fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
-    let inner_pairs: Vec<Pair<Rule>> = pair.into_inner().collect();
+    let inner_pairs: Vec<Pair<Rule>> = pair.to_vec();
     let first = inner_pairs.first().unwrap();
 
     match first.as_rule() {
@@ -178,7 +188,8 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
         }
         Rule::Num => {
             let day = parse_in_range(first.as_str(), 1, 31)?;
-            let month = month_from_rule(inner_pairs.get(1).unwrap().as_rule()).number_from_month();
+            let mut month_name = inner_pairs.get(1).unwrap().clone().into_inner();
+            let month = month_from_rule(month_name.next().unwrap().as_rule()).number_from_month();
             let year = match inner_pairs.get(2) {
                 Some(rule) => parse_in_range(rule.as_str(), 0, 10000)?,
                 None => now!().year(),
@@ -403,7 +414,7 @@ fn month_from_rule(rule: Rule) -> Month {
         Rule::October => Month::October,
         Rule::November => Month::November,
         Rule::December => Month::December,
-        _ => panic!("Tried to convert something that isn't a month to a month. This is a bug."),
+        _ => panic!("Tried to convert something that isn't a month to a month. This is a bug. Tried to convert: {:?}", rule),
     }
 }
 
