@@ -20,6 +20,8 @@ Date = {
     | Num ~ Month_Name ~ Num
     | Num ~ Month_Name
     | RelativeSpecifier ~ Weekday
+    | RelativeSpecifier ~ TimeUnit
+    | RelativeSpecifier ~ TimeUnit ~ Weekday
     | Weekday
 }
 

@@ -7,7 +7,7 @@ use std::{
 use chrono::{
     DateTime, Datelike, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Weekday,
 };
-use pest::{iterators::Pair, Parser};
+use pest::{iterators::{Pair, Pairs}, Parser};
 use pest_derive::Parser;
 use thiserror::Error;
 
@@ -52,6 +52,29 @@ pub enum ParseResult {
     DateTime(DateTime<Local>),
     Date(NaiveDate),
     Time(NaiveTime),
+}
+
+trait FindRule<'i> {
+    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>>;
+    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>>;
+}
+
+impl<'i> FindRule<'i> for Pairs<'i, Rule> {
+    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>> {
+        self.to_owned().find(|x| x.as_rule() == rule)
+    }
+
+    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>> {
+        let s = self.to_owned();
+        let mut vec: Vec<Pair<Rule>> = Vec::new();
+        for pair in s {
+            if pair.as_rule() == rule {
+                vec.push(pair);
+            }
+        }
+
+        vec
+    }
 }
 
 /// Converts a human expression of a date into a more usable one.
