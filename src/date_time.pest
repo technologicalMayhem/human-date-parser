@@ -15,6 +15,7 @@ IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
     | Today
     | Tomorrow
+    | Overmorrow
     | Yesterday
     | IsoDate
     | Num ~ Month_Name ~ Num
@@ -28,6 +29,7 @@ Date = {
 Today = { "today" }
 Tomorrow = { "tomorrow" }
 Yesterday = { "yesterday" }
+Overmorrow = { "overmorrow" }
 
 Time = @{ 
     | Num ~ ( ":" ~ Num ){1,2}

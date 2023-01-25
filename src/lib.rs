@@ -164,6 +164,7 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
     match rules(&date)[..] {
         [Rule::Today] => Ok(now!().date_naive()),
         [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
+        [Rule::Overmorrow] => Ok(now!().add(Duration::days(2)).date_naive()),
         [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
         [Rule::IsoDate] => {
             let from_str = NaiveDate::from_str(date[0].as_str()).unwrap();
@@ -472,6 +473,9 @@ mod tests {
 
     generate_test_cases!(
         "Today 18:30" = "2010-01-01 18:30:00",
+        "Yesterday 18:30" = "2009-12-31 18:30:00",
+        "Tomorrow 18:30" = "2010-01-02 18:30:00",
+        "Overmorrow 18:30" = "2010-01-03 18:30:00",
         "2022-11-07 13:25:30" = "2022-11-07 13:25:30",
         "15:20 Friday" = "2010-01-08 15:20:00",
         "This Friday 17:00" = "2010-01-08 17:00:00",
