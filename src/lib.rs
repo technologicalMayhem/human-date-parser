@@ -7,10 +7,7 @@ use std::{
 use chrono::{
     DateTime, Datelike, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Weekday,
 };
-use pest::{
-    iterators::Pair,
-    Parser,
-};
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use thiserror::Error;
 
@@ -199,58 +196,54 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
                 _ => unreachable!(),
             }
         }
-        [Rule::RelativeSpecifier, Rule::Weekday] |
-        [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
+        [Rule::RelativeSpecifier, Rule::Weekday]
+        | [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
             let specifier = date[0].clone_vec()[0].as_rule();
 
             let specific_weekday: Rule;
             if date[1].as_rule() == Rule::Weekday {
                 specific_weekday = date[1].clone_vec()[0].as_rule();
-            }
-            else {
+            } else {
                 specific_weekday = date[2].clone_vec()[0].as_rule();
             }
 
             let weekday = weekday_from_rule(specific_weekday);
-            Ok(find_weekday(weekday, specifier))
+            let now = now!().date_naive();
+            match specifier {
+                Rule::This => Ok(find_weekday(now, weekday)),
+                Rule::Next => Ok(find_weekday(now.add(Duration::days(7)), weekday)),
+                Rule::Last => Ok(find_weekday(now.sub(Duration::days(7)), weekday)),
+                _ => unreachable!(),
+            }
         }
         [Rule::Weekday] => {
             let specific_weekday = date[0].clone_vec()[0].as_rule();
             let weekday = weekday_from_rule(specific_weekday);
-            Ok(find_weekday(weekday, Rule::This))
+            Ok(find_next_weekday_occurence(now!().date_naive(), weekday))
         }
         _ => unreachable!(),
     }
 }
 
 /// Finds the date for a given Weekday, either as this, next or last occurence of it.
-///
-/// # Panics
-///
-/// Panics if the rule given is not This, Next or Last.
-fn find_weekday(weekday: Weekday, rule: Rule) -> NaiveDate {
+fn find_weekday(date: NaiveDate, weekday: Weekday) -> NaiveDate {
+    let diff = date.weekday().num_days_from_monday() as i64 - weekday.num_days_from_monday() as i64;
+    date.sub(Duration::days(diff))
+}
+
+/// Finds the next occurence of the weekday
+fn find_next_weekday_occurence(date: NaiveDate, weekday: Weekday) -> NaiveDate {
     let current = now!().weekday().num_days_from_monday();
     let next = weekday.num_days_from_monday();
-    let mut days_to_add: i64;
+    let days_to_add: i64;
 
-    if current <= next {
+    if current < next {
         days_to_add = (next - current).into();
     } else {
         days_to_add = (7 - (current - next)).into();
     }
 
-    // TODO: Change this so that 'Next Thursday' refer to the thursday in the next week, even if thursday of this week has already passed
-    // Right now if thursday has passed it will spit out the date for thursday two weeks ahead.
-    match rule {
-        Rule::This => {}
-        Rule::Next => days_to_add += 7,
-        Rule::Last => days_to_add -= 7,
-        _ => {
-            panic!("Finding a weekday should only be done with This, Next or Last. This is a bug.")
-        }
-    }
-
-    now!().date_naive() + Duration::days(days_to_add)
+    date.add(Duration::days(days_to_add))
 }
 
 /// Parsed the time component into a `NaiveTime`.
@@ -484,6 +477,13 @@ mod tests {
         "This Friday 17:00" = "2010-01-08 17:00:00",
         "13:25, Next Tuesday" = "2010-01-12 13:25:00",
         "Last Friday at 19:45" = "2009-12-25 19:45:00",
+        "Next week" = "2010-01-08 00:00:00",
+        "This week" = "2010-01-01 00:00:00",
+        "Last week" = "2009-12-25 00:00:00",
+        "Next week Monday" = "2010-01-04 00:00:00",
+        "This week Friday" = "2010-01-01 00:00:00",
+        "This week Monday" = "2009-12-28 00:00:00",
+        "Last week Tuesday" = "2009-12-22 00:00:00",
         "In 3 days" = "2010-01-04 00:00:00",
         "In 2 hours" = "2010-01-01 02:00:00",
         "In 5 minutes and 30 seconds" = "2010-01-01 00:05:30",

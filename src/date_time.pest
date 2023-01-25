@@ -22,7 +22,7 @@ Date = {
     | RelativeSpecifier ~ Week ~ Weekday
     | RelativeSpecifier ~ TimeUnit
     | RelativeSpecifier ~ Weekday
-    | Weekday
+    | ("upcoming")? ~ Weekday
 }
 
 Today = { "today" }
