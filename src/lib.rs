@@ -71,7 +71,7 @@ impl<'a> PairHelper<'a> for Pair<'a, Rule> {
     }
 }
 
-fn rules<'a>(v: &Vec<Pair<'a, Rule>>) -> Vec<Rule> {
+fn rules(v: &[Pair<'_, Rule>]) -> Vec<Rule> {
     v.iter().map(|pair| pair.as_rule()).collect()
 }
 
@@ -83,14 +83,10 @@ fn rules<'a>(v: &Vec<Pair<'a, Rule>>) -> Vec<Rule> {
 ///
 /// # Examples
 /// ```
-/// use human_date_parser::{from_human_time, ParseResult};
-///
-/// fn main() {
-///     let date = from_human_time("Last Friday at 19:45").unwrap();
-///     match date {
-///         ParseResult::DateTime(date) => println!("{date}"),
-///         _ => unreachable!()
-///     }
+/// let date = from_human_time("Last Friday at 19:45").unwrap();
+/// match date {
+///     ParseResult::DateTime(date) => println!("{date}"),
+///     _ => unreachable!()
 /// }
 /// ```
 pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
@@ -122,7 +118,7 @@ pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
 fn parse_datetime(head: Pair<Rule>) -> Result<DateTime<Local>, ParseError> {
     let date;
     let time;
-    let mut iter = head.into_inner().into_iter();
+    let mut iter = head.into_inner();
     let first = iter.next().unwrap();
     let second = iter.next().unwrap();
 
@@ -204,12 +200,11 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
         | [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
             let specifier = date[0].clone_vec()[0].as_rule();
 
-            let specific_weekday: Rule;
-            if date[1].as_rule() == Rule::Weekday {
-                specific_weekday = date[1].clone_vec()[0].as_rule();
+            let specific_weekday = if date[1].as_rule() == Rule::Weekday {
+                date[1].clone_vec()[0].as_rule()
             } else {
-                specific_weekday = date[2].clone_vec()[0].as_rule();
-            }
+                date[2].clone_vec()[0].as_rule()
+            };
 
             let weekday = weekday_from_rule(specific_weekday);
             let now = now!().date_naive();
@@ -239,13 +234,12 @@ fn find_weekday(date: NaiveDate, weekday: Weekday) -> NaiveDate {
 fn find_next_weekday_occurence(date: NaiveDate, weekday: Weekday) -> NaiveDate {
     let current = now!().weekday().num_days_from_monday();
     let next = weekday.num_days_from_monday();
-    let days_to_add: i64;
 
-    if current < next {
-        days_to_add = (next - current).into();
+    let days_to_add = if current < next {
+        (next - current).into()
     } else {
-        days_to_add = (7 - (current - next)).into();
-    }
+        (7 - (current - next)).into()
+    };
 
     date.add(Duration::days(days_to_add))
 }
