@@ -21,6 +21,8 @@ pub enum ParseError {
     InvalidFormat,
     #[error("The value {amount} is invalid.")]
     ValueInvalid { amount: String },
+    #[error("The date you given is a impossible date.")]
+    ImpossibleDate,
     #[error("You gave a value of {value}. It was only allowed to be between {lower} and {upper}.")]
     ValueOutOfRange {
         lower: String,
@@ -48,6 +50,7 @@ macro_rules! now {
     };
 }
 
+#[derive(Debug)]
 pub enum ParseResult {
     DateTime(DateTime<Local>),
     Date(NaiveDate),
@@ -166,10 +169,10 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
         [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
         [Rule::Overmorrow] => Ok(now!().add(Duration::days(2)).date_naive()),
         [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
-        [Rule::IsoDate] => {
-            let from_str = NaiveDate::from_str(date[0].as_str()).unwrap();
-            Ok(from_str)
-        }
+        [Rule::IsoDate] => NaiveDate::from_str(date[0].as_str()).map_err(|e|match e.kind() {
+            chrono::format::ParseErrorKind::Impossible => ParseError::ImpossibleDate,
+            _ => ParseError::InvalidFormat
+        }),
         [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
             let day = parse_in_range(date[0].as_str(), 1, 31)?;
 
@@ -471,6 +474,24 @@ mod tests {
         };
     }
 
+    /// Variant of aboce to check if parsing fails gracefully
+    macro_rules! generate_test_cases_error {
+        ( $( $case:literal ),* ) => {
+            $(
+                concat_idents!(fn_name = fail_parse_, $case {
+                    #[test]
+                    fn fn_name () {
+                        let input = $case.to_lowercase();
+                        let result = from_human_time(&input);
+
+                        println!("Result: {result:#?}\nExpected: Error");
+                        assert!(result.is_err());
+                    }
+                });
+            )*
+        };
+    }
+
     generate_test_cases!(
         "Today 18:30" = "2010-01-01 18:30:00",
         "Yesterday 18:30" = "2009-12-31 18:30:00",
@@ -505,5 +526,9 @@ mod tests {
         "A minute ago" = "2009-12-31 23:59:00",
         "A second ago" = "2009-12-31 23:59:59",
         "now" = "2010-01-01 00:00:00"
+    );
+
+    generate_test_cases_error!(
+        "2023-11-31"
     );
 }
