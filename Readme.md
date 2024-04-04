@@ -39,6 +39,9 @@ Currently the following kinds of formats are supported:
 - A minute ago
 - A second ago
 - Now
+- Yesterday
+- Tomorrow
+- Overmorrow
 
 ## Issues
 
