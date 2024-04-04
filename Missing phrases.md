@@ -1,11 +1,3 @@
 Phrasings that I still need to implement:
-- `{RelativeSpecifier} ~ {TimeUnit}`
-    - Next week
-    - Last Week
-    - This Week
-- `{RelativeSpecifier} ~ {TimeUnit} ~ {Weekday}`
-    - Next week Monday
-    - this week friday
-    - Last week tuesday
 - Overmorrow
     - Day after tomorrow

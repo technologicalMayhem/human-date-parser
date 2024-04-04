@@ -7,7 +7,7 @@ use std::{
 use chrono::{
     DateTime, Datelike, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Weekday,
 };
-use pest::{iterators::{Pair, Pairs}, Parser};
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use thiserror::Error;
 
@@ -21,6 +21,8 @@ pub enum ParseError {
     InvalidFormat,
     #[error("The value {amount} is invalid.")]
     ValueInvalid { amount: String },
+    #[error("The date you given is a impossible date.")]
+    ImpossibleDate,
     #[error("You gave a value of {value}. It was only allowed to be between {lower} and {upper}.")]
     ValueOutOfRange {
         lower: String,
@@ -48,43 +50,29 @@ macro_rules! now {
     };
 }
 
+#[derive(Debug)]
 pub enum ParseResult {
     DateTime(DateTime<Local>),
     Date(NaiveDate),
     Time(NaiveTime),
 }
 
-trait FindRule<'i> {
-    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>>;
-    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>>;
+trait PairHelper<'a> {
+    fn vec(self) -> Vec<Pair<'a, Rule>>;
+    fn clone_vec(&self) -> Vec<Pair<'a, Rule>>;
 }
-
-impl<'i> FindRule<'i> for Pairs<'i, Rule> {
-    fn find_one(&self, rule: Rule) -> Option<Pair<'i, Rule>> {
-        self.to_owned().find(|x| x.as_rule() == rule)
-    }
-
-    fn find_all(&self, rule: Rule) -> Vec<Pair<'i, Rule>> {
-        let s = self.to_owned();
-        let mut vec: Vec<Pair<Rule>> = Vec::new();
-        for pair in s {
-            if pair.as_rule() == rule {
-                vec.push(pair);
-            }
-        }
-
-        vec
-    }
-}
-
-trait ToVec<'a> {
-    fn to_vec(self) -> Vec<Pair<'a, Rule>>;
-}
-
-impl<'a> ToVec<'a> for Pair<'a, Rule> {
-    fn to_vec(self) -> Vec<Pair<'a, Rule>> {
+impl<'a> PairHelper<'a> for Pair<'a, Rule> {
+    fn vec(self) -> Vec<Pair<'a, Rule>> {
         self.into_inner().collect()
     }
+
+    fn clone_vec(&self) -> Vec<Pair<'a, Rule>> {
+        self.clone().into_inner().collect()
+    }
+}
+
+fn rules<'a>(v: &Vec<Pair<'a, Rule>>) -> Vec<Rule> {
+    v.iter().map(|pair| pair.as_rule()).collect()
 }
 
 /// Converts a human expression of a date into a more usable one.
@@ -175,22 +163,23 @@ fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, Pars
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a `NaiveDate`.
 fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
-    let inner_pairs: Vec<Pair<Rule>> = pair.to_vec();
-    let first = inner_pairs.first().unwrap();
+    let date = pair.vec();
+    match rules(&date)[..] {
+        [Rule::Today] => Ok(now!().date_naive()),
+        [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
+        [Rule::Overmorrow] => Ok(now!().add(Duration::days(2)).date_naive()),
+        [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
+        [Rule::IsoDate] => NaiveDate::from_str(date[0].as_str()).map_err(|e|match e.kind() {
+            chrono::format::ParseErrorKind::Impossible => ParseError::ImpossibleDate,
+            _ => ParseError::InvalidFormat
+        }),
+        [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
+            let day = parse_in_range(date[0].as_str(), 1, 31)?;
 
-    match first.as_rule() {
-        Rule::Today => Ok(now!().date_naive()),
-        Rule::Tomorrow => Ok(now!().add(Duration::days(1)).date_naive()),
-        Rule::Yesterday => Ok(now!().sub(Duration::days(1)).date_naive()),
-        Rule::IsoDate => {
-            let from_str = NaiveDate::from_str(first.as_str()).unwrap();
-            Ok(from_str)
-        }
-        Rule::Num => {
-            let day = parse_in_range(first.as_str(), 1, 31)?;
-            let mut month_name = inner_pairs.get(1).unwrap().clone().into_inner();
-            let month = month_from_rule(month_name.next().unwrap().as_rule()).number_from_month();
-            let year = match inner_pairs.get(2) {
+            let month_rule = date[1].clone_vec()[0].as_rule();
+            let month = month_from_rule(month_rule).number_from_month();
+
+            let year = match date.get(2) {
                 Some(rule) => parse_in_range(rule.as_str(), 0, 10000)?,
                 None => now!().year(),
             };
@@ -201,48 +190,64 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
             };
             Ok(date)
         }
-        Rule::RelativeSpecifier => {
-            let specifier = first.clone().into_inner().next().unwrap().as_rule();
-            let weekday_rule = inner_pairs.get(1).unwrap().clone();
-            let specific_weekday = weekday_rule.into_inner().next().unwrap().as_rule();
-            let weekday = weekday_from_rule(specific_weekday);
-            Ok(find_weekday(weekday, specifier))
+        [Rule::RelativeSpecifier, Rule::TimeUnit] => {
+            let unit = date[1].clone_vec()[0].as_rule();
+            let duration = create_duration(unit, 1)?;
+            match date[0].clone_vec()[0].as_rule() {
+                Rule::This => Ok(now!().date_naive()),
+                Rule::Next => Ok(now!().add(duration).date_naive()),
+                Rule::Last => Ok(now!().sub(duration).date_naive()),
+                _ => unreachable!(),
+            }
         }
-        Rule::Weekday => {
-            let specific_weekday = first.clone().into_inner().next().unwrap().as_rule();
+        [Rule::RelativeSpecifier, Rule::Weekday]
+        | [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
+            let specifier = date[0].clone_vec()[0].as_rule();
+
+            let specific_weekday: Rule;
+            if date[1].as_rule() == Rule::Weekday {
+                specific_weekday = date[1].clone_vec()[0].as_rule();
+            } else {
+                specific_weekday = date[2].clone_vec()[0].as_rule();
+            }
+
             let weekday = weekday_from_rule(specific_weekday);
-            Ok(find_weekday(weekday, Rule::This))
+            let now = now!().date_naive();
+            match specifier {
+                Rule::This => Ok(find_weekday(now, weekday)),
+                Rule::Next => Ok(find_weekday(now.add(Duration::days(7)), weekday)),
+                Rule::Last => Ok(find_weekday(now.sub(Duration::days(7)), weekday)),
+                _ => unreachable!(),
+            }
+        }
+        [Rule::Weekday] => {
+            let specific_weekday = date[0].clone_vec()[0].as_rule();
+            let weekday = weekday_from_rule(specific_weekday);
+            Ok(find_next_weekday_occurence(now!().date_naive(), weekday))
         }
         _ => unreachable!(),
     }
 }
 
 /// Finds the date for a given Weekday, either as this, next or last occurence of it.
-///
-/// # Panics
-///
-/// Panics if the rule given is not This, Next or Last.
-fn find_weekday(weekday: Weekday, rule: Rule) -> NaiveDate {
+fn find_weekday(date: NaiveDate, weekday: Weekday) -> NaiveDate {
+    let diff = date.weekday().num_days_from_monday() as i64 - weekday.num_days_from_monday() as i64;
+    date.sub(Duration::days(diff))
+}
+
+/// Finds the next occurence of the weekday
+fn find_next_weekday_occurence(date: NaiveDate, weekday: Weekday) -> NaiveDate {
     let current = now!().weekday().num_days_from_monday();
     let next = weekday.num_days_from_monday();
-    let mut days_to_add: i64;
+    let days_to_add: i64;
 
-    if current <= next {
+    if current < next {
         days_to_add = (next - current).into();
     } else {
         days_to_add = (7 - (current - next)).into();
     }
 
-    match rule {
-        Rule::This => {}
-        Rule::Next => days_to_add += 7,
-        Rule::Last => days_to_add -= 7,
-        _ => {
-            panic!("Finding a weekday should only be done with This, Next or Last. This is a bug.")
-        }
-    }
-
-    now!().date_naive() + Duration::days(days_to_add)
+    date.add(Duration::days(days_to_add))
 }
 
 /// Parsed the time component into a `NaiveTime`.
@@ -469,13 +474,41 @@ mod tests {
         };
     }
 
+    /// Variant of aboce to check if parsing fails gracefully
+    macro_rules! generate_test_cases_error {
+        ( $( $case:literal ),* ) => {
+            $(
+                concat_idents!(fn_name = fail_parse_, $case {
+                    #[test]
+                    fn fn_name () {
+                        let input = $case.to_lowercase();
+                        let result = from_human_time(&input);
+
+                        println!("Result: {result:#?}\nExpected: Error");
+                        assert!(result.is_err());
+                    }
+                });
+            )*
+        };
+    }
+
     generate_test_cases!(
         "Today 18:30" = "2010-01-01 18:30:00",
+        "Yesterday 18:30" = "2009-12-31 18:30:00",
+        "Tomorrow 18:30" = "2010-01-02 18:30:00",
+        "Overmorrow 18:30" = "2010-01-03 18:30:00",
         "2022-11-07 13:25:30" = "2022-11-07 13:25:30",
         "15:20 Friday" = "2010-01-08 15:20:00",
         "This Friday 17:00" = "2010-01-08 17:00:00",
         "13:25, Next Tuesday" = "2010-01-12 13:25:00",
         "Last Friday at 19:45" = "2009-12-25 19:45:00",
+        "Next week" = "2010-01-08 00:00:00",
+        "This week" = "2010-01-01 00:00:00",
+        "Last week" = "2009-12-25 00:00:00",
+        "Next week Monday" = "2010-01-04 00:00:00",
+        "This week Friday" = "2010-01-01 00:00:00",
+        "This week Monday" = "2009-12-28 00:00:00",
+        "Last week Tuesday" = "2009-12-22 00:00:00",
         "In 3 days" = "2010-01-04 00:00:00",
         "In 2 hours" = "2010-01-01 02:00:00",
         "In 5 minutes and 30 seconds" = "2010-01-01 00:05:30",
@@ -493,5 +526,9 @@ mod tests {
         "A minute ago" = "2009-12-31 23:59:00",
         "A second ago" = "2009-12-31 23:59:59",
         "now" = "2010-01-01 00:00:00"
+    );
+
+    generate_test_cases_error!(
+        "2023-11-31"
     );
 }

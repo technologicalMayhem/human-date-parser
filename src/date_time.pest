@@ -15,19 +15,21 @@ IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
     | Today
     | Tomorrow
+    | Overmorrow
     | Yesterday
     | IsoDate
     | Num ~ Month_Name ~ Num
     | Num ~ Month_Name
-    | RelativeSpecifier ~ Weekday
+    | RelativeSpecifier ~ Week ~ Weekday
     | RelativeSpecifier ~ TimeUnit
-    | RelativeSpecifier ~ TimeUnit ~ Weekday
-    | Weekday
+    | RelativeSpecifier ~ Weekday
+    | ("upcoming")? ~ Weekday
 }
 
 Today = { "today" }
 Tomorrow = { "tomorrow" }
 Yesterday = { "yesterday" }
+Overmorrow = { "overmorrow" }
 
 Time = @{ 
     | Num ~ ( ":" ~ Num ){1,2}
