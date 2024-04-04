@@ -165,9 +165,9 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
         [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
         [Rule::Overmorrow] => Ok(now!().add(Duration::days(2)).date_naive()),
         [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
-        [Rule::IsoDate] => NaiveDate::from_str(date[0].as_str()).map_err(|e|match e.kind() {
+        [Rule::IsoDate] => NaiveDate::from_str(date[0].as_str()).map_err(|e| match e.kind() {
             chrono::format::ParseErrorKind::Impossible => ParseError::ImpossibleDate,
-            _ => ParseError::InvalidFormat
+            _ => ParseError::InvalidFormat,
         }),
         [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
             let day = parse_in_range(date[0].as_str(), 1, 31)?;
@@ -523,7 +523,5 @@ mod tests {
         "Overmorrow" = "2010-01-03 00:00:00"
     );
 
-    generate_test_cases_error!(
-        "2023-11-31"
-    );
+    generate_test_cases_error!("2023-11-31");
 }
