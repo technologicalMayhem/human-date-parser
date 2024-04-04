@@ -525,7 +525,8 @@ mod tests {
         "An hour ago" = "2009-12-31 23:00:00",
         "A minute ago" = "2009-12-31 23:59:00",
         "A second ago" = "2009-12-31 23:59:59",
-        "now" = "2010-01-01 00:00:00"
+        "now" = "2010-01-01 00:00:00",
+        "Overmorrow" = "2010-01-03 00:00:00"
     );
 
     generate_test_cases_error!(
