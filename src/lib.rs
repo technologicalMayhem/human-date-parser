@@ -78,11 +78,11 @@ impl<'a> PairHelper<'a> for Pair<'a, Rule> {
 }
 
 fn rules(v: &[Pair<'_, Rule>]) -> Vec<Rule> {
-    v.iter().map(|pair| pair.as_rule()).collect()
+    v.iter().map(pest::iterators::Pair::as_rule).collect()
 }
 
-/// Converts a human expression of a date into a more usable one. 
-/// The ``timezone`` will be used as the 'perspective' to evaluete the expression from.
+/// Converts a human expression of a date into a more usable one.
+/// The `timezone` will be used as the 'perspective' to evaluete the expression from.
 ///
 /// # Errors
 ///
@@ -102,17 +102,18 @@ where
     Tz: TimeZone,
 {
     let lowercase = str.to_lowercase();
-    let mut parsed = match DateTimeParser::parse(Rule::HumanTime, &lowercase) {
-        Ok(parsed) => parsed,
-        Err(_) => return Err(ParseError::InvalidFormat),
+    let Ok(mut parsed) = DateTimeParser::parse(Rule::HumanTime, &lowercase) else {
+        return Err(ParseError::InvalidFormat);
     };
 
-    let head = parsed.next().unwrap();
+    let Some(head) = parsed.next() else {
+        return Err(ParseError::InvalidFormat);
+    };
     let rule = head.as_rule();
     let result: ParseResult<Tz> = match rule {
         Rule::DateTime => ParseResult::DateTime(parse_datetime(head, timezone)?),
         Rule::Date => ParseResult::Date(parse_date(head, timezone)?),
-        Rule::Time => ParseResult::Time(parse_time(head)?),
+        Rule::Time => ParseResult::Time(parse_time(&head)?),
         Rule::In | Rule::Ago => ParseResult::DateTime(parse_in_or_ago(head, rule, timezone)?),
         Rule::Now => ParseResult::DateTime(now(timezone)),
         _ => unreachable!(),
@@ -121,7 +122,7 @@ where
     Ok(result)
 }
 
-/// Parse a string DateTime element into it's chrono equivalent.
+/// Parse a string `DateTime` element into it's chrono equivalent.
 ///
 /// # Errors
 ///
@@ -138,10 +139,10 @@ where
 
     if first.as_rule() == Rule::Date {
         date = parse_date(first, timezone)?;
-        time = parse_time(second)?;
+        time = parse_time(&second)?;
     } else {
         date = parse_date(second, timezone)?;
-        time = parse_time(first)?;
+        time = parse_time(&first)?;
     }
 
     let date_time = NaiveDateTime::new(date, time);
@@ -149,7 +150,7 @@ where
     Ok(date_time)
 }
 
-/// Parses a string in the 'In...' or '...ago' format into a valid DateTime.
+/// Parses a string in the 'In...' or '...ago' format into a valid `DateTime`.
 ///
 /// # Errors
 ///
@@ -194,19 +195,18 @@ where
             _ => ParseError::InvalidFormat,
         }),
         [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
-            let day = parse_in_range(date[0].as_str(), 1, 31)?;
+            let day = parse_in_range(date[0].as_str(), &1, &31)?;
 
             let month_rule = date[1].clone_vec()[0].as_rule();
             let month = month_from_rule(month_rule).number_from_month();
 
             let year = match date.get(2) {
-                Some(rule) => parse_in_range(rule.as_str(), 0, 10000)?,
+                Some(rule) => parse_in_range(rule.as_str(), &0, &10000)?,
                 None => now(timezone).year(),
             };
 
-            let date = match NaiveDate::from_ymd_opt(year, month, day) {
-                Some(date) => date,
-                None => return Err(ParseError::InvalidFormat),
+            let Some(date) = NaiveDate::from_ymd_opt(year, month, day) else {
+                return Err(ParseError::InvalidFormat);
             };
             Ok(date)
         }
@@ -254,8 +254,8 @@ where
 
 /// Finds the date for a given Weekday, either as this, next or last occurence of it.
 fn find_weekday(date: NaiveDate, weekday: Weekday) -> NaiveDate {
-    let diff = date.weekday().num_days_from_monday() as i64 - weekday.num_days_from_monday() as i64;
-    date.sub(Duration::days(diff))
+    let diff = date.weekday().num_days_from_monday() - weekday.num_days_from_monday();
+    date.sub(Duration::days(i64::from(diff)))
 }
 
 /// Finds the next occurence of the weekday
@@ -280,7 +280,7 @@ where
 /// # Errors
 ///
 /// This function will return an error if the pair contains values than can not be parsed into `NaiveTime`.
-fn parse_time(pair: Pair<Rule>) -> Result<NaiveTime, ParseError> {
+fn parse_time(pair: &Pair<Rule>) -> Result<NaiveTime, ParseError> {
     let time = match NaiveTime::parse_from_str(pair.as_str(), "%H:%M:%S") {
         Ok(time) => time,
         Err(_) => match NaiveTime::parse_from_str(pair.as_str(), "%H:%M") {
@@ -296,7 +296,7 @@ fn parse_time(pair: Pair<Rule>) -> Result<NaiveTime, ParseError> {
 /// # Errors
 ///
 /// This function will return an error if `str` could not be parsed or it is outside the given bounds.
-fn parse_in_range<T>(str: &str, lower: T, upper: T) -> Result<T, ParseError>
+fn parse_in_range<T>(str: &str, lower: &T, upper: &T) -> Result<T, ParseError>
 where
     T: FromStr + PartialOrd<T> + Display,
 {
@@ -305,7 +305,7 @@ where
         Err(_) => return Err(ParseError::ValueInvalid { amount: str.into() }),
     };
 
-    if value < lower || value > upper {
+    if value < *lower || value > *upper {
         return Err(ParseError::ValueOutOfRange {
             lower: lower.to_string(),
             upper: upper.to_string(),
@@ -393,13 +393,10 @@ where
                     })
                 }
             };
-            let next_year = match now.with_year(now.year() + years) {
-                Some(year) => year,
-                None => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
+            let Some(next_year) = now.with_year(now.year() + years) else {
+                return Err(ParseError::ValueInvalid {
+                    amount: amount.to_string(),
+                });
             };
             next_year - now
         }
@@ -413,13 +410,10 @@ where
                     })
                 }
             };
-            let next_month = match now.with_month0((now.month0() + months) % 12) {
-                Some(month) => month,
-                None => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
+            let Some(next_month) = now.with_month0((now.month0() + months) % 12) else {
+                return Err(ParseError::ValueInvalid {
+                    amount: amount.to_string(),
+                });
             };
 
             next_month - now
@@ -436,10 +430,6 @@ where
 }
 
 /// Returns the `chrono::month` equivalent of a parser rule.
-///
-/// # Panics
-///
-/// Panics if the given rule does not correspond to a month.
 fn month_from_rule(rule: Rule) -> Month {
     match rule {
         Rule::January => Month::January,
@@ -454,15 +444,11 @@ fn month_from_rule(rule: Rule) -> Month {
         Rule::October => Month::October,
         Rule::November => Month::November,
         Rule::December => Month::December,
-        _ => panic!("Tried to convert something that isn't a month to a month. This is a bug. Tried to convert: {:?}", rule),
+        _ => unreachable!("Tried to convert something that isn't a month to a month. This is a bug. Tried to convert: {rule:?}"),
     }
 }
 
 /// Returns the `chrono::weekday` equivalent of a parser rule.
-///
-/// # Panics
-///
-/// Panics if the given rule does not correspond to a weekday.
 fn weekday_from_rule(rule: Rule) -> Weekday {
     match rule {
         Rule::Monday => Weekday::Mon,
@@ -473,7 +459,9 @@ fn weekday_from_rule(rule: Rule) -> Weekday {
         Rule::Saturday => Weekday::Sat,
         Rule::Sunday => Weekday::Sun,
         _ => {
-            panic!("Tried to convert {rule:?} to a weekday, which is not possible. This is a bug.")
+            unreachable!(
+                "Tried to convert {rule:?} to a weekday, which is not possible. This is a bug."
+            )
         }
     }
 }
