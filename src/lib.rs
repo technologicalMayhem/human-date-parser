@@ -57,6 +57,16 @@ pub enum ParseResult {
     Time(NaiveTime),
 }
 
+impl Display for ParseResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseResult::DateTime(datetime) => write!(f, "{}", datetime),
+            ParseResult::Date(date) =>write!(f, "{}", date),
+            ParseResult::Time(time) =>write!(f, "{}", time),
+        }
+    }
+}
+
 trait PairHelper<'a> {
     fn vec(self) -> Vec<Pair<'a, Rule>>;
     fn clone_vec(&self) -> Vec<Pair<'a, Rule>>;
@@ -83,6 +93,7 @@ fn rules(v: &[Pair<'_, Rule>]) -> Vec<Rule> {
 ///
 /// # Examples
 /// ```
+/// use human_date_parser::{from_human_time, ParseResult};
 /// let date = from_human_time("Last Friday at 19:45").unwrap();
 /// match date {
 ///     ParseResult::DateTime(date) => println!("{date}"),
@@ -102,7 +113,7 @@ pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
         Rule::DateTime => ParseResult::DateTime(parse_datetime(head)?),
         Rule::Date => ParseResult::Date(parse_date(head)?),
         Rule::Time => ParseResult::Time(parse_time(head)?),
-        Rule::In | Rule::Ago => ParseResult::DateTime(parse_in_or_ago(head, rule)?),
+        Rule::In | Rule::Ago => parse_in_or_ago(head, rule)?,
         Rule::Now => ParseResult::DateTime(now!()),
         _ => unreachable!(),
     };
@@ -135,21 +146,39 @@ fn parse_datetime(head: Pair<Rule>) -> Result<DateTime<Local>, ParseError> {
     Ok(date_time)
 }
 
+fn apply_duration(human_time: ParseResult, duration: Duration, operation: Rule) -> ParseResult {
+    match (human_time, operation) {
+        (ParseResult::DateTime(date), Rule::In) => ParseResult::DateTime(date + duration),
+        (ParseResult::DateTime(date), Rule::Ago) => ParseResult::DateTime(date - duration),
+        (ParseResult::Date(date), Rule::In) => ParseResult::Date(date + duration),
+        (ParseResult::Date(date), Rule::Ago) => ParseResult::Date(date - duration),
+        (ParseResult::Time(date), Rule::In) => ParseResult::Time(date + duration),
+        (ParseResult::Time(date), Rule::Ago) => ParseResult::Time(date - duration),
+        _ => unreachable!()
+    }
+
+}
+
 /// Parses a string in the 'In...' or '...ago' format into a valid DateTime.
 ///
 /// # Errors
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a date.
-fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, ParseError> {
-    let durations = collect_durations(head.into_inner().next().unwrap())?;
+fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<ParseResult, ParseError> {
+    let mut duration_rule = head.into_inner();
+    let durations = collect_durations(duration_rule.next().unwrap())?;
     let mut full_duration = Duration::zero();
     for duration in durations {
         full_duration = full_duration.add(duration);
     }
-    Ok(match rule {
-        Rule::In => now!() + full_duration,
-        Rule::Ago => now!() - full_duration,
-        _ => unreachable!(),
+    Ok(if let Some(target_datetime) = duration_rule.next() {
+        apply_duration(from_human_time(target_datetime.as_str())?, full_duration, rule)
+    } else {
+        ParseResult::DateTime(match rule {
+            Rule::In => now!() + full_duration,
+            Rule::Ago => now!() - full_duration,
+            _ => unreachable!(),
+        })
     })
 }
 
@@ -520,7 +549,12 @@ mod tests {
         "A minute ago" = "2009-12-31 23:59:00",
         "A second ago" = "2009-12-31 23:59:59",
         "now" = "2010-01-01 00:00:00",
-        "Overmorrow" = "2010-01-03 00:00:00"
+        "Overmorrow" = "2010-01-03 00:00:00",
+        "7 days ago at 04:00" = "2010-01-01 04:00:00",
+        "12 hours ago at 04:00" = "2010-01-01 16:00:00",
+        "12 hours ago at today" = "2010-12-31 12:00:00",
+        "12 hours ago at 7 days ago" = "2009-12-24 12:00:00",
+        "7 days ago at 7 days ago" = "2009-12-18 00:00:00"
     );
 
     generate_test_cases_error!("2023-11-31");
