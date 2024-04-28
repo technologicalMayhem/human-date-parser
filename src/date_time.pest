@@ -8,7 +8,7 @@ HumanTime = _{
 }
 
 DateTime = {
-    | Date ~ ("at")? ~ Time
+    | Date ~ (AtLiteral)? ~ Time
     | Time ~ (",")? ~ Date
 }
 IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
@@ -36,7 +36,7 @@ Time = @{
 }
 
 In = { "in" ~ Duration }
-Ago = { Duration ~ "ago" }
+Ago = { Duration ~ AgoLiteral ~ (AtLiteral? ~ HumanTime)? }
 Now = { "now" }
 
 Duration = {
@@ -61,6 +61,9 @@ RelativeSpecifier = {
 This = { "this" }
 Next = { "next" }
 Last = { "last" }
+
+AgoLiteral = _{ "ago" }
+AtLiteral  = _{ "at" }
 
 Quantifier = { Num ~ TimeUnit }
 Num = @{ ASCII_DIGIT+ }
