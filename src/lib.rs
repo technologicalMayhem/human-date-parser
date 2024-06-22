@@ -483,7 +483,7 @@ mod tests {
                         };
 
                         println!("Result: {result}\nExpected: {expected}\nNote: Maximum difference between these values allowed is 10ms.");
-                        assert!(result - expected < Duration::milliseconds(10));
+                        assert!((result - expected).abs() < Duration::milliseconds(10));
                     }
                 });
             )*
