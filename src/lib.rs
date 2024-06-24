@@ -5,7 +5,8 @@ use std::{
 };
 
 use chrono::{
-    DateTime, Datelike, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, Weekday,
+    DateTime, Datelike, Duration, Local, Month, Months, NaiveDate, NaiveDateTime, NaiveTime,
+    Weekday,
 };
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
@@ -61,8 +62,8 @@ impl Display for ParseResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseResult::DateTime(datetime) => write!(f, "{}", datetime),
-            ParseResult::Date(date) =>write!(f, "{}", date),
-            ParseResult::Time(time) =>write!(f, "{}", time),
+            ParseResult::Date(date) => write!(f, "{}", date),
+            ParseResult::Time(time) => write!(f, "{}", time),
         }
     }
 }
@@ -117,7 +118,6 @@ pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
         Rule::Now => ParseResult::DateTime(now!()),
         _ => unreachable!(),
     };
-
     Ok(result)
 }
 
@@ -152,8 +152,9 @@ fn parse_datetime(head: Pair<Rule>) -> Result<DateTime<Local>, ParseError> {
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a date.
 fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, ParseError> {
+    let in_or_ago_rule = head.as_rule();
     let mut duration_rule = head.into_inner();
-    let durations = collect_durations(duration_rule.next().unwrap())?;
+    let durations = collect_durations(duration_rule.next().unwrap(), in_or_ago_rule)?;
     let mut full_duration = Duration::zero();
     for duration in durations {
         full_duration = full_duration.add(duration);
@@ -163,7 +164,11 @@ fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, Pars
         match from_human_time(target_datetime.as_str())? {
             ParseResult::DateTime(dt) => dt,
             ParseResult::Date(d) => d.and_time(now.time()).and_local_timezone(Local).unwrap(),
-            ParseResult::Time(t) => now.date_naive().and_time(t).and_local_timezone(Local).unwrap(),
+            ParseResult::Time(t) => now
+                .date_naive()
+                .and_time(t)
+                .and_local_timezone(Local)
+                .unwrap(),
         }
     } else {
         now
@@ -209,8 +214,13 @@ fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
             Ok(date)
         }
         [Rule::RelativeSpecifier, Rule::TimeUnit] => {
+            let in_or_ago = match date[0].as_rule() {
+                Rule::Ago => Rule::Ago,
+                Rule::In => Rule::In,
+                _ => date[0].as_rule(),
+            };
             let unit = date[1].clone_vec()[0].as_rule();
-            let duration = create_duration(unit, 1)?;
+            let duration = create_duration(unit, 1, in_or_ago)?;
             match date[0].clone_vec()[0].as_rule() {
                 Rule::This => Ok(now!().date_naive()),
                 Rule::Next => Ok(now!().add(duration).date_naive()),
@@ -312,7 +322,10 @@ where
 /// # Errors
 ///
 /// This function will return an error if the pair contains invalid durations.
-fn collect_durations(duration_rule: Pair<Rule>) -> Result<Vec<Duration>, ParseError> {
+fn collect_durations(
+    duration_rule: Pair<Rule>,
+    in_or_ago_rule: Rule,
+) -> Result<Vec<Duration>, ParseError> {
     let mut durations = Vec::new();
 
     for rule in duration_rule.into_inner() {
@@ -325,7 +338,9 @@ fn collect_durations(duration_rule: Pair<Rule>) -> Result<Vec<Duration>, ParseEr
                     match inner.as_rule() {
                         Rule::Num => {
                             amount = match inner.as_str().parse() {
-                                Ok(num) => num,
+                                Ok(num) => {
+                                    num
+                                }
                                 Err(_) => {
                                     return Err(ParseError::ValueInvalid {
                                         amount: inner.as_str().into(),
@@ -333,12 +348,14 @@ fn collect_durations(duration_rule: Pair<Rule>) -> Result<Vec<Duration>, ParseEr
                                 }
                             }
                         }
-                        Rule::TimeUnit => time_type = inner.into_inner().next().unwrap().as_rule(),
+                        Rule::TimeUnit => {
+                            time_type = inner.into_inner().next().unwrap().as_rule();
+                        }
                         _ => unreachable!(),
                     }
                 }
 
-                durations.push(create_duration(time_type, amount)?);
+                durations.push(create_duration(time_type, amount, in_or_ago_rule)?);
             }
             Rule::SingleUnit => {
                 for inner in rule.into_inner() {
@@ -346,6 +363,7 @@ fn collect_durations(duration_rule: Pair<Rule>) -> Result<Vec<Duration>, ParseEr
                         durations.push(create_duration(
                             inner.into_inner().next().unwrap().as_rule(),
                             1,
+                            in_or_ago_rule,
                         )?);
                     }
                 }
@@ -362,7 +380,7 @@ fn collect_durations(duration_rule: Pair<Rule>) -> Result<Vec<Duration>, ParseEr
 /// # Errors
 ///
 /// This function will return an error if the pair contains values than can not be parsed into a `Duration`.
-fn create_duration(rule: Rule, amount: i64) -> Result<Duration, ParseError> {
+fn create_duration(rule: Rule, amount: i64, in_or_ago: Rule) -> Result<Duration, ParseError> {
     let dur = match rule {
         Rule::Year => {
             let now = now!();
@@ -394,16 +412,36 @@ fn create_duration(rule: Rule, amount: i64) -> Result<Duration, ParseError> {
                     })
                 }
             };
-            let next_month = match now.with_month0((now.month0() + months) % 12) {
-                Some(month) => month,
-                None => {
+            let months = match in_or_ago {
+                Rule::Ago => {
+                    match now.checked_sub_months(Months::new(months)) {
+                        Some(month) => month,
+                        None => {
+                            return Err(ParseError::ValueInvalid {
+                                amount: amount.to_string(),
+                            })
+                        }
+                    }
+                }
+                Rule::In => {
+                    match now.with_month0((now.month0() + months) % 12) {
+                            Some(month) => month,
+                        None => {
+                            return Err(ParseError::ValueInvalid {
+                                amount: amount.to_string(),
+                            })
+                        }
+                    }
+                }
+                _ => {
                     return Err(ParseError::ValueInvalid {
                         amount: amount.to_string(),
                     })
                 }
             };
 
-            next_month - now
+            // Must be a positive number
+            (months - now).abs()
         }
         Rule::Week => Duration::days(amount * 7),
         Rule::Day => Duration::days(amount),
@@ -483,7 +521,7 @@ mod tests {
                         };
 
                         println!("Result: {result}\nExpected: {expected}\nNote: Maximum difference between these values allowed is 10ms.");
-                        assert!(result - expected < Duration::milliseconds(10));
+                        assert!((result - expected).abs() < Duration::milliseconds(10));
                     }
                 });
             )*
@@ -515,8 +553,9 @@ mod tests {
         "Overmorrow 18:30" = "2010-01-03 18:30:00",
         "2022-11-07 13:25:30" = "2022-11-07 13:25:30",
         "15:20 Friday" = "2010-01-08 15:20:00",
-        "This Friday 17:00" = "2010-01-08 17:00:00",
-        "13:25, Next Tuesday" = "2010-01-12 13:25:00",
+        "This Friday 17:00" = "2010-01-01 17:00:00",
+        "Next Friday 17:00" = "2010-01-08 17:00:00",
+        "13:25, Next Tuesday" = "2010-01-05 13:25:00",
         "Last Friday at 19:45" = "2009-12-25 19:45:00",
         "Next week" = "2010-01-08 00:00:00",
         "This week" = "2010-01-01 00:00:00",
@@ -532,10 +571,14 @@ mod tests {
         "10 hours and 5 minutes ago" = "2009-12-31 13:55:00",
         "2 hours, 32 minutes and 7 seconds ago" = "2009-12-31 21:27:53",
         "1 years, 2 months, 3 weeks, 5 days, 8 hours, 17 minutes and 45 seconds ago" =
-            "2008-10-07 16:42:15",
-        "1 year, 1 month, 1 week, 1 day, 1 hour, 1 minute and 1 second ago" = "2008-11-23 22:58:59",
+            "2008-10-05 15:42:15",
+        "1 year, 1 month, 1 week, 1 day, 1 hour, 1 minute and 1 second ago" = "2008-11-22 22:58:59",
         "A year ago" = "2009-01-01 00:00:00",
         "A month ago" = "2009-12-01 00:00:00",
+        "3 months ago" = "2009-10-01 00:00:00",
+        "6 months ago" = "2009-07-01 00:00:00",
+        "7 months ago" = "2009-06-01 00:00:00",
+        "In 7 months" = "2010-08-01 00:00:00",
         "A week ago" = "2009-12-25 00:00:00",
         "A day ago" = "2009-12-31 00:00:00",
         "An hour ago" = "2009-12-31 23:00:00",
@@ -544,8 +587,8 @@ mod tests {
         "now" = "2010-01-01 00:00:00",
         "Overmorrow" = "2010-01-03 00:00:00",
         "7 days ago at 04:00" = "2009-12-25 04:00:00",
-        "12 hours ago at 04:00" = "2010-12-31 16:00:00",
-        "12 hours ago at today" = "2010-12-31 12:00:00",
+        "12 hours ago at 04:00" = "2009-12-31 16:00:00",
+        "12 hours ago at today" = "2009-12-31 12:00:00",
         "12 hours ago at 7 days ago" = "2009-12-24 12:00:00",
         "7 days ago at 7 days ago" = "2009-12-18 00:00:00"
     );
