@@ -12,6 +12,8 @@ use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use thiserror::Error;
 
+mod ast;
+
 #[derive(Parser)]
 #[grammar = "date_time.pest"]
 struct DateTimeParser;

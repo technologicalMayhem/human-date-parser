@@ -1,4 +1,4 @@
-HumanTime = _{
+HumanTime = {
     | DateTime
     | Date
     | ("at")? ~ Time
@@ -11,7 +11,7 @@ DateTime = {
     | Date ~ (AtLiteral)? ~ Time
     | Time ~ (",")? ~ Date
 }
-IsoDate = @{ Num ~ "-" ~ Num ~ "-" ~ Num }
+IsoDate = ${ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
     | Today
     | Tomorrow
@@ -31,7 +31,7 @@ Tomorrow = { "tomorrow" }
 Yesterday = { "yesterday" }
 Overmorrow = { "overmorrow" }
 
-Time = @{ 
+Time = ${ 
     | Num ~ ( ":" ~ Num ){1,2}
 }
 
