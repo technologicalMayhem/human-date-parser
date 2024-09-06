@@ -3,7 +3,7 @@ This library is currently in  a bit of a messy state. I have written a lot of it
 
 Since I people actually use my library, I want to improve it and make it more maintainable and ensure that it works as expected.
 
-- [ ] Develop a proper AST
+- [x] Develop a proper AST
 	* Right now `pest` only provides a way to turn a expression 		into a walk-able tree of pairs. This is makes reading the code pretty confusing as every piece deals with both parsing data as well as actually generating the correct output. Building a AST from the given expression and *only then* actually operating on it would help a lot. Separation of concerns and all that.
 	* `pest-ast`, `pest_typed_derive` and `pest-consume` might be useful for that.
 - [ ] Improve documentation
@@ -15,7 +15,7 @@ Since I people actually use my library, I want to improve it and make it more ma
    * Follow guidelines from [keepachangelog](https://keepachangelog.com/en/1.1.0/)
 - [ ] Error Handling:
    * Error handling can be more detailed and specific, especially in cases where multiple potential causes exist for a failure.
-- [ ] Get rid of time zones
+- [x] Get rid of time zones
    * Dealing with time zones is complicated. Handle all dates and times in their naive form and let the caller manage time zones to prevent issues.
 - [ ] Performance
    * Improve performance by getting rid of unnecessary clones and redundant parsing.
