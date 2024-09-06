@@ -11,7 +11,8 @@ fn main() {
     loop {
         buffer.clear();
         stdin.read_line(&mut buffer).unwrap();
-        let result = match human_date_parser::from_human_time(&buffer) {
+        let now = Local::now().naive_local();
+        let result = match human_date_parser::from_human_time(&buffer, now) {
             Ok(time) => time,
             Err(e) => {
                 println!("{e}");

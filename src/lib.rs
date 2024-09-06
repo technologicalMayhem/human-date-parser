@@ -1,61 +1,66 @@
-use std::{
-    fmt::Display,
-    ops::{Add, Sub},
-    str::FromStr,
-};
+use std::fmt::Display;
 
-use chrono::{
-    DateTime, Datelike, Duration, Local, Month, Months, NaiveDate, NaiveDateTime, NaiveTime,
-    Weekday,
+use ast::{
+    build_ast_from, Ago, Date, DateTime, Duration as AstDuration, In, IsoDate, Quantifier,
+    RelativeSpecifier, Time, TimeUnit,
 };
-use pest::{iterators::Pair, Parser};
-use pest_derive::Parser;
+use chrono::{
+    Datelike, Days, Duration as ChronoDuration, Month, Months, NaiveDate, NaiveDateTime,
+    NaiveTime, Weekday,
+};
 use thiserror::Error;
 
 mod ast;
 
-#[derive(Parser)]
-#[grammar = "date_time.pest"]
-struct DateTimeParser;
-
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("The data has a invalid format")]
+    #[error("Could not match input to any known format")]
     InvalidFormat,
-    #[error("The value {amount} is invalid.")]
-    ValueInvalid { amount: String },
-    #[error("The date you given is a impossible date.")]
-    ImpossibleDate,
-    #[error("You gave a value of {value}. It was only allowed to be between {lower} and {upper}.")]
-    ValueOutOfRange {
-        lower: String,
-        upper: String,
-        value: String,
+    #[error("One or more errors occured when processing input")]
+    ProccessingErrors(Vec<ProcessingError>),
+    #[error(
+        "An internal library error occured. This should not happen. Please report it. Error: {0}"
+    )]
+    InternalError(#[from] InternalError),
+}
+
+#[derive(Debug, Error)]
+pub enum ProcessingError {
+    #[error("Could not build time from {hour}:{minute}")]
+    TimeHourMinute { hour: u32, minute: u32 },
+    #[error("Could not build time from {hour}:{minute}:{second}")]
+    TimeHourMinuteSecond { hour: u32, minute: u32, second: u32 },
+    #[error("Failed to add {count} {unit} to the current time")]
+    AddToNow { unit: String, count: u32 },
+    #[error("Failed to subtract {count} {unit} from the current time")]
+    SubtractFromNow { unit: String, count: u32 },
+    #[error("Failed to subtract {count} {unit} from {date}")]
+    SubtractFromDate {
+        unit: String,
+        count: u32,
+        date: NaiveDateTime,
     },
+    #[error("Failed to add {count} {unit} to {date}")]
+    AddToDate {
+        unit: String,
+        count: u32,
+        date: NaiveDateTime,
+    },
+    #[error("{year}-{month}-{day} is not a valid date")]
+    InvalidDate { year: i32, month: u32, day: u32 },
+    #[error("Failed to parse inner human time: {0}")]
+    InnerHumanTimeParse(Box<ParseError>),
 }
 
-#[cfg(not(test))]
-/// Returns the current time in the local timezone.
-macro_rules! now {
-    () => {
-        Local::now()
-    };
-}
-
-#[cfg(test)]
-/// If we are in a test enviroment we will just pretend it is 2010-01-01 00:00:00 right now.
-macro_rules! now {
-    () => {
-        NaiveDateTime::parse_from_str("2010-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")
-            .unwrap()
-            .and_local_timezone(Local)
-            .unwrap()
-    };
+#[derive(Debug, Error)]
+pub enum InternalError {
+    #[error("Failed to build AST. This is a bug.")]
+    FailedToBuildAst,
 }
 
 #[derive(Debug)]
 pub enum ParseResult {
-    DateTime(DateTime<Local>),
+    DateTime(NaiveDateTime),
     Date(NaiveDate),
     Time(NaiveTime),
 }
@@ -70,24 +75,6 @@ impl Display for ParseResult {
     }
 }
 
-trait PairHelper<'a> {
-    fn vec(self) -> Vec<Pair<'a, Rule>>;
-    fn clone_vec(&self) -> Vec<Pair<'a, Rule>>;
-}
-impl<'a> PairHelper<'a> for Pair<'a, Rule> {
-    fn vec(self) -> Vec<Pair<'a, Rule>> {
-        self.into_inner().collect()
-    }
-
-    fn clone_vec(&self) -> Vec<Pair<'a, Rule>> {
-        self.clone().into_inner().collect()
-    }
-}
-
-fn rules(v: &[Pair<'_, Rule>]) -> Vec<Rule> {
-    v.iter().map(|pair| pair.as_rule()).collect()
-}
-
 /// Converts a human expression of a date into a more usable one.
 ///
 /// # Errors
@@ -96,405 +83,370 @@ fn rules(v: &[Pair<'_, Rule>]) -> Vec<Rule> {
 ///
 /// # Examples
 /// ```
+/// use chrono::Local;
 /// use human_date_parser::{from_human_time, ParseResult};
-/// let date = from_human_time("Last Friday at 19:45").unwrap();
+/// let now = Local::now().naive_local();
+/// let date = from_human_time("Last Friday at 19:45", now).unwrap();
 /// match date {
 ///     ParseResult::DateTime(date) => println!("{date}"),
 ///     _ => unreachable!()
 /// }
 /// ```
-pub fn from_human_time(str: &str) -> Result<ParseResult, ParseError> {
+pub fn from_human_time(str: &str, now: NaiveDateTime) -> Result<ParseResult, ParseError> {
     let lowercase = str.to_lowercase();
-    let mut parsed = match DateTimeParser::parse(Rule::HumanTime, &lowercase) {
-        Ok(parsed) => parsed,
-        Err(_) => return Err(ParseError::InvalidFormat),
-    };
+    let parsed = build_ast_from(&lowercase)?;
 
-    let head = parsed.next().unwrap();
-    let rule = head.as_rule();
-    let result: ParseResult = match rule {
-        Rule::DateTime => ParseResult::DateTime(parse_datetime(head)?),
-        Rule::Date => ParseResult::Date(parse_date(head)?),
-        Rule::Time => ParseResult::Time(parse_time(head)?),
-        Rule::In | Rule::Ago => ParseResult::DateTime(parse_in_or_ago(head, rule)?),
-        Rule::Now => ParseResult::DateTime(now!()),
-        _ => unreachable!(),
-    };
-    Ok(result)
+    parse_human_time(parsed, now)
 }
 
-/// Parse a string DateTime element into it's chrono equivalent.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains values than can not be parsed into a date.
-fn parse_datetime(head: Pair<Rule>) -> Result<DateTime<Local>, ParseError> {
-    let date;
-    let time;
-    let mut iter = head.into_inner();
-    let first = iter.next().unwrap();
-    let second = iter.next().unwrap();
-
-    if first.as_rule() == Rule::Date {
-        date = parse_date(first)?;
-        time = parse_time(second)?;
-    } else {
-        date = parse_date(second)?;
-        time = parse_time(first)?;
-    }
-
-    let date_time = NaiveDateTime::new(date, time);
-    let date_time = date_time.and_local_timezone(Local).unwrap();
-    Ok(date_time)
-}
-
-/// Parses a string in the 'In...' or '...ago' format into a valid DateTime.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains values than can not be parsed into a date.
-fn parse_in_or_ago(head: Pair<Rule>, rule: Rule) -> Result<DateTime<Local>, ParseError> {
-    let in_or_ago_rule = head.as_rule();
-    let mut duration_rule = head.into_inner();
-    let durations = collect_durations(duration_rule.next().unwrap(), in_or_ago_rule)?;
-    let mut full_duration = Duration::zero();
-    for duration in durations {
-        full_duration = full_duration.add(duration);
-    }
-    let now = now!();
-    let now = if let Some(target_datetime) = duration_rule.next() {
-        match from_human_time(target_datetime.as_str())? {
-            ParseResult::DateTime(dt) => dt,
-            ParseResult::Date(d) => d.and_time(now.time()).and_local_timezone(Local).unwrap(),
-            ParseResult::Time(t) => now
-                .date_naive()
-                .and_time(t)
-                .and_local_timezone(Local)
-                .unwrap(),
+fn parse_human_time(parsed: ast::HumanTime, now: NaiveDateTime) -> Result<ParseResult, ParseError> {
+    match parsed {
+        ast::HumanTime::DateTime(date_time) => {
+            parse_date_time(date_time, &now).map(|dt| ParseResult::DateTime(dt))
         }
-    } else {
-        now
-    };
-    Ok(match rule {
-        Rule::In => now + full_duration,
-        Rule::Ago => now - full_duration,
-        _ => unreachable!(),
+        ast::HumanTime::Date(date) => parse_date(date, &now)
+            .map(|date| ParseResult::Date(date))
+            .map_err(|err| ParseError::ProccessingErrors(vec![err])),
+        ast::HumanTime::Time(time) => parse_time(time)
+            .map(|time| ParseResult::Time(time))
+            .map_err(|err| ParseError::ProccessingErrors(vec![err])),
+        ast::HumanTime::In(in_ast) => parse_in(in_ast, &now)
+            .map(|time| ParseResult::DateTime(time))
+            .map_err(|err| ParseError::ProccessingErrors(vec![err])),
+        ast::HumanTime::Ago(ago) => parse_ago(ago, &now)
+            .map(|time| ParseResult::DateTime(time))
+            .map_err(|err| ParseError::ProccessingErrors(vec![err])),
+        ast::HumanTime::Now => Ok(ParseResult::DateTime(now)),
+    }
+}
+
+fn parse_date_time(date_time: DateTime, now: &NaiveDateTime) -> Result<NaiveDateTime, ParseError> {
+    let date = parse_date(date_time.date, now);
+    let time = parse_time(date_time.time);
+
+    match (date, time) {
+        (Ok(date), Ok(time)) => Ok(NaiveDateTime::new(date, time)),
+        (Ok(_), Err(time_error)) => Err(ParseError::ProccessingErrors(vec![time_error])),
+        (Err(date_error), Ok(_)) => Err(ParseError::ProccessingErrors(vec![date_error])),
+        (Err(date_error), Err(time_error)) => {
+            Err(ParseError::ProccessingErrors(vec![date_error, time_error]))
+        }
+    }
+}
+
+fn parse_date(date: Date, now: &NaiveDateTime) -> Result<NaiveDate, ProcessingError> {
+    match date {
+        Date::Today => Ok(now.date()),
+        Date::Tomorrow => {
+            now.date()
+                .checked_add_days(Days::new(1))
+                .ok_or(ProcessingError::AddToNow {
+                    unit: String::from("days"),
+                    count: 1,
+                })
+        }
+        Date::Overmorrow => {
+            now.date()
+                .checked_add_days(Days::new(2))
+                .ok_or(ProcessingError::AddToNow {
+                    unit: String::from("days"),
+                    count: 2,
+                })
+        }
+        Date::Yesterday => {
+            now.date()
+                .checked_sub_days(Days::new(1))
+                .ok_or(ProcessingError::SubtractFromNow {
+                    unit: String::from("days"),
+                    count: 1,
+                })
+        }
+        Date::IsoDate(iso_date) => parse_iso_date(iso_date),
+        Date::DayMonthYear(day, month, year) => parse_day_month_year(day, month, year as i32),
+        Date::DayMonth(day, month) => parse_day_month_year(day, month, now.year()),
+        Date::RelativeWeekWeekday(relative, weekday) => {
+            find_weekday_relative_week(relative, weekday.into(), now.date())
+        }
+        Date::RelativeWeekday(relative, weekday) => {
+            find_weekday_relative(relative, weekday.into(), now.date())
+        }
+        Date::RelativeTimeUnit(relative, time_unit) => {
+            Ok(relative_date_time_unit(relative, time_unit, now.clone())?.date())
+        }
+        Date::UpcomingWeekday(weekday) => {
+            find_weekday_relative(RelativeSpecifier::Next, weekday.into(), now.date())
+        }
+    }
+}
+
+fn parse_iso_date(iso_date: IsoDate) -> Result<NaiveDate, ProcessingError> {
+    let (year, month, day) = (iso_date.year as i32, iso_date.month, iso_date.day);
+    NaiveDate::from_ymd_opt(year, month, day).ok_or(ProcessingError::InvalidDate {
+        year,
+        month,
+        day,
     })
 }
 
-/// Parses the date component of the string into a `NaiveDate`.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains values than can not be parsed into a `NaiveDate`.
-fn parse_date(pair: Pair<Rule>) -> Result<NaiveDate, ParseError> {
-    let date = pair.vec();
-    match rules(&date)[..] {
-        [Rule::Today] => Ok(now!().date_naive()),
-        [Rule::Tomorrow] => Ok(now!().add(Duration::days(1)).date_naive()),
-        [Rule::Overmorrow] => Ok(now!().add(Duration::days(2)).date_naive()),
-        [Rule::Yesterday] => Ok(now!().sub(Duration::days(1)).date_naive()),
-        [Rule::IsoDate] => NaiveDate::from_str(date[0].as_str()).map_err(|e| match e.kind() {
-            chrono::format::ParseErrorKind::Impossible => ParseError::ImpossibleDate,
-            _ => ParseError::InvalidFormat,
+fn parse_day_month_year(day: u32, month: Month, year: i32) -> Result<NaiveDate, ProcessingError> {
+    let month = month.number_from_month();
+    NaiveDate::from_ymd_opt(year, month, day).ok_or(ProcessingError::InvalidDate {
+        year,
+        month,
+        day,
+    })
+}
+
+fn parse_time(time: Time) -> Result<NaiveTime, ProcessingError> {
+    match time {
+        Time::HourMinute(hour, minute) => NaiveTime::from_hms_opt(hour, minute, 0)
+            .ok_or(ProcessingError::TimeHourMinute { hour, minute }),
+        Time::HourMinuteSecond(hour, minute, second) => NaiveTime::from_hms_opt(
+            hour, minute, second,
+        )
+        .ok_or(ProcessingError::TimeHourMinuteSecond {
+            hour,
+            minute,
+            second,
         }),
-        [Rule::Num, Rule::Month_Name] | [Rule::Num, Rule::Month_Name, Rule::Num] => {
-            let day = parse_in_range(date[0].as_str(), 1, 31)?;
-
-            let month_rule = date[1].clone_vec()[0].as_rule();
-            let month = month_from_rule(month_rule).number_from_month();
-
-            let year = match date.get(2) {
-                Some(rule) => parse_in_range(rule.as_str(), 0, 10000)?,
-                None => now!().year(),
-            };
-
-            let date = match NaiveDate::from_ymd_opt(year, month, day) {
-                Some(date) => date,
-                None => return Err(ParseError::InvalidFormat),
-            };
-            Ok(date)
-        }
-        [Rule::RelativeSpecifier, Rule::TimeUnit] => {
-            let in_or_ago = match date[0].as_rule() {
-                Rule::Ago => Rule::Ago,
-                Rule::In => Rule::In,
-                _ => date[0].as_rule(),
-            };
-            let unit = date[1].clone_vec()[0].as_rule();
-            let duration = create_duration(unit, 1, in_or_ago)?;
-            match date[0].clone_vec()[0].as_rule() {
-                Rule::This => Ok(now!().date_naive()),
-                Rule::Next => Ok(now!().add(duration).date_naive()),
-                Rule::Last => Ok(now!().sub(duration).date_naive()),
-                _ => unreachable!(),
-            }
-        }
-        [Rule::RelativeSpecifier, Rule::Weekday]
-        | [Rule::RelativeSpecifier, Rule::Week, Rule::Weekday] => {
-            let specifier = date[0].clone_vec()[0].as_rule();
-
-            let specific_weekday = if date[1].as_rule() == Rule::Weekday {
-                date[1].clone_vec()[0].as_rule()
-            } else {
-                date[2].clone_vec()[0].as_rule()
-            };
-
-            let weekday = weekday_from_rule(specific_weekday);
-            let now = now!().date_naive();
-            match specifier {
-                Rule::This => Ok(find_weekday(now, weekday)),
-                Rule::Next => Ok(find_weekday(now.add(Duration::days(7)), weekday)),
-                Rule::Last => Ok(find_weekday(now.sub(Duration::days(7)), weekday)),
-                _ => unreachable!(),
-            }
-        }
-        [Rule::Weekday] => {
-            let specific_weekday = date[0].clone_vec()[0].as_rule();
-            let weekday = weekday_from_rule(specific_weekday);
-            Ok(find_next_weekday_occurence(now!().date_naive(), weekday))
-        }
-        _ => unreachable!(),
     }
 }
 
-/// Finds the date for a given Weekday, either as this, next or last occurence of it.
-fn find_weekday(date: NaiveDate, weekday: Weekday) -> NaiveDate {
-    let diff = date.weekday().num_days_from_monday() as i64 - weekday.num_days_from_monday() as i64;
-    date.sub(Duration::days(diff))
+fn parse_in(in_ast: In, now: &NaiveDateTime) -> Result<NaiveDateTime, ProcessingError> {
+    let dt = now.clone();
+    apply_duration(in_ast.0, dt, Direction::Forwards)
 }
 
-/// Finds the next occurence of the weekday
-fn find_next_weekday_occurence(date: NaiveDate, weekday: Weekday) -> NaiveDate {
-    let current = now!().weekday().num_days_from_monday();
-    let next = weekday.num_days_from_monday();
+fn parse_ago(ago: Ago, now: &NaiveDateTime) -> Result<NaiveDateTime, ProcessingError> {
+    match ago {
+        Ago::AgoFromNow(ago) => {
+            let dt = now.clone();
+            apply_duration(ago, dt, Direction::Backwards)
+        }
+        Ago::AgoFromTime(ago, time) => {
+            let human_time = parse_human_time(*time, now.clone())
+                .map_err(|e| ProcessingError::InnerHumanTimeParse(Box::new(e)))?;
+            let dt = match human_time {
+                ParseResult::DateTime(dt) => dt,
+                ParseResult::Date(date) => NaiveDateTime::new(date, now.time()),
+                ParseResult::Time(time) => NaiveDateTime::new(now.date(), time),
+            };
+            apply_duration(ago, dt, Direction::Backwards)
+        }
+    }
+}
 
-    let days_to_add = if current < next {
-        (next - current).into()
+#[derive(PartialEq, Eq)]
+enum Direction {
+    Forwards,
+    Backwards,
+}
+
+fn apply_duration(
+    duration: AstDuration,
+    mut dt: NaiveDateTime,
+    direction: Direction,
+) -> Result<NaiveDateTime, ProcessingError> {
+    for quant in duration.0 {
+        match quant {
+            Quantifier::Year(years) => {
+                let years = years as i32;
+                if direction == Direction::Forwards {
+                    dt = dt
+                        .with_year(dt.year() + years)
+                        .ok_or(ProcessingError::InvalidDate {
+                            year: dt.year() + years,
+                            month: dt.month(),
+                            day: dt.day(),
+                        })?;
+                } else {
+                    dt = dt
+                        .with_year(dt.year() - years)
+                        .ok_or(ProcessingError::InvalidDate {
+                            year: dt.year() - years,
+                            month: dt.month(),
+                            day: dt.day(),
+                        })?;
+                }
+            }
+            Quantifier::Month(months) => {
+                if direction == Direction::Forwards {
+                    dt = dt.checked_add_months(Months::new(months)).ok_or(
+                        ProcessingError::AddToDate {
+                            unit: "months".to_string(),
+                            count: months,
+                            date: dt,
+                        },
+                    )?
+                } else {
+                    dt = dt.checked_sub_months(Months::new(months)).ok_or(
+                        ProcessingError::SubtractFromDate {
+                            unit: "months".to_string(),
+                            count: months,
+                            date: dt,
+                        },
+                    )?
+                }
+            }
+            Quantifier::Week(weeks) => {
+                if direction == Direction::Forwards {
+                    dt = dt.checked_add_days(Days::new(weeks as u64 * 7)).ok_or(
+                        ProcessingError::AddToDate {
+                            unit: "weeks".to_string(),
+                            count: weeks,
+                            date: dt,
+                        },
+                    )?
+                } else {
+                    dt = dt.checked_sub_days(Days::new(weeks as u64 * 7)).ok_or(
+                        ProcessingError::AddToDate {
+                            unit: "weeks".to_string(),
+                            count: weeks,
+                            date: dt,
+                        },
+                    )?
+                }
+            }
+            Quantifier::Day(days) => {
+                if direction == Direction::Forwards {
+                    dt = dt.checked_add_days(Days::new(days as u64)).ok_or(
+                        ProcessingError::AddToDate {
+                            unit: "days".to_string(),
+                            count: days,
+                            date: dt,
+                        },
+                    )?
+                } else {
+                    dt = dt.checked_sub_days(Days::new(days as u64)).ok_or(
+                        ProcessingError::AddToDate {
+                            unit: "days".to_string(),
+                            count: days,
+                            date: dt,
+                        },
+                    )?
+                }
+            }
+            Quantifier::Hour(hours) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::hours(hours as i64)
+                } else {
+                    dt = dt - ChronoDuration::hours(hours as i64)
+                }
+            }
+            Quantifier::Minute(minutes) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::minutes(minutes as i64)
+                } else {
+                    dt = dt - ChronoDuration::minutes(minutes as i64)
+                }
+            }
+            Quantifier::Second(seconds) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::seconds(seconds as i64)
+                } else {
+                    dt = dt - ChronoDuration::seconds(seconds as i64)
+                }
+            }
+        };
+    }
+
+    Ok(dt)
+}
+
+fn relative_date_time_unit(
+    relative: RelativeSpecifier,
+    time_unit: TimeUnit,
+    now: NaiveDateTime,
+) -> Result<NaiveDateTime, ProcessingError> {
+    let quantifier = match time_unit {
+        TimeUnit::Year => Quantifier::Year(1),
+        TimeUnit::Month => Quantifier::Month(1),
+        TimeUnit::Week => Quantifier::Week(1),
+        TimeUnit::Day => Quantifier::Day(1),
+        TimeUnit::Hour | TimeUnit::Minute | TimeUnit::Second => {
+            unreachable!("Non-date time units should never be used in this function.")
+        }
+    };
+
+
+    match relative {
+        RelativeSpecifier::This => Ok(now),
+        RelativeSpecifier::Next => apply_duration(AstDuration(vec![quantifier]), now, Direction::Forwards),
+        RelativeSpecifier::Last => apply_duration(AstDuration(vec![quantifier]), now, Direction::Backwards),
+    }
+}
+
+fn find_weekday_relative_week(
+    relative: RelativeSpecifier,
+    weekday: Weekday,
+    now: NaiveDate,
+) -> Result<NaiveDate, ProcessingError> {
+    let day_offset = -(now.weekday().num_days_from_monday() as i64);
+    let week_offset = match relative {
+        RelativeSpecifier::This => 0,
+        RelativeSpecifier::Next => 1,
+        RelativeSpecifier::Last => -1,
+    } * 7;
+    let offset = day_offset + week_offset;
+
+    let now = if offset.is_positive() {
+        now.checked_add_days(Days::new(offset.unsigned_abs()))
+            .ok_or(ProcessingError::AddToNow {
+                unit: "days".to_string(),
+                count: offset.unsigned_abs() as u32,
+            })?
     } else {
-        (7 - (current - next)).into()
+        now.checked_sub_days(Days::new(offset.unsigned_abs()))
+            .ok_or(ProcessingError::SubtractFromNow {
+                unit: "days".to_string(),
+                count: offset.unsigned_abs() as u32,
+            })?
     };
 
-    date.add(Duration::days(days_to_add))
+    find_weekday_relative(RelativeSpecifier::This, weekday, now)
 }
 
-/// Parsed the time component into a `NaiveTime`.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains values than can not be parsed into `NaiveTime`.
-fn parse_time(pair: Pair<Rule>) -> Result<NaiveTime, ParseError> {
-    let time = match NaiveTime::parse_from_str(pair.as_str(), "%H:%M:%S") {
-        Ok(time) => time,
-        Err(_) => match NaiveTime::parse_from_str(pair.as_str(), "%H:%M") {
-            Ok(time) => time,
-            Err(_) => return Err(ParseError::InvalidFormat),
-        },
-    };
-    Ok(time)
-}
-
-/// Parses a `str` into a number that is clamped withing the given lower and upper bound.
-///
-/// # Errors
-///
-/// This function will return an error if `str` could not be parsed or it is outside the given bounds.
-fn parse_in_range<T>(str: &str, lower: T, upper: T) -> Result<T, ParseError>
-where
-    T: FromStr + PartialOrd<T> + Display,
-{
-    let value: T = match str.parse() {
-        Ok(val) => val,
-        Err(_) => return Err(ParseError::ValueInvalid { amount: str.into() }),
-    };
-
-    if value < lower || value > upper {
-        return Err(ParseError::ValueOutOfRange {
-            lower: lower.to_string(),
-            upper: upper.to_string(),
-            value: str.to_string(),
-        });
-    }
-
-    Ok(value)
-}
-
-/// Parses all the durations in the Duration component and returns them as `Vec<Duration>`.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains invalid durations.
-fn collect_durations(
-    duration_rule: Pair<Rule>,
-    in_or_ago_rule: Rule,
-) -> Result<Vec<Duration>, ParseError> {
-    let mut durations = Vec::new();
-
-    for rule in duration_rule.into_inner() {
-        match rule.as_rule() {
-            Rule::Quantifier => {
-                let mut amount: i64 = 0;
-                let mut time_type = Rule::Minute;
-
-                for inner in rule.into_inner() {
-                    match inner.as_rule() {
-                        Rule::Num => {
-                            amount = match inner.as_str().parse() {
-                                Ok(num) => {
-                                    num
-                                }
-                                Err(_) => {
-                                    return Err(ParseError::ValueInvalid {
-                                        amount: inner.as_str().into(),
-                                    })
-                                }
-                            }
-                        }
-                        Rule::TimeUnit => {
-                            time_type = inner.into_inner().next().unwrap().as_rule();
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-
-                durations.push(create_duration(time_type, amount, in_or_ago_rule)?);
+fn find_weekday_relative(
+    relative: RelativeSpecifier,
+    weekday: Weekday,
+    now: NaiveDate,
+) -> Result<NaiveDate, ProcessingError> {
+    match relative {
+        RelativeSpecifier::This | RelativeSpecifier::Next => {
+            if matches!(relative, RelativeSpecifier::This) && now.weekday() == weekday {
+                return Ok(now.clone());
             }
-            Rule::SingleUnit => {
-                for inner in rule.into_inner() {
-                    if inner.as_rule() == Rule::TimeUnit {
-                        durations.push(create_duration(
-                            inner.into_inner().next().unwrap().as_rule(),
-                            1,
-                            in_or_ago_rule,
-                        )?);
-                    }
-                }
-            }
-            _ => unreachable!(),
+
+            let current_weekday = now.weekday().num_days_from_monday();
+            let target_weekday = weekday.num_days_from_monday();
+
+            let offset = if target_weekday > current_weekday {
+                target_weekday - current_weekday
+            } else {
+                7 - current_weekday + target_weekday
+            };
+
+            now.checked_add_days(Days::new(offset as u64))
+                .ok_or(ProcessingError::AddToNow {
+                    unit: "days".to_string(),
+                    count: offset,
+                })
         }
-    }
+        RelativeSpecifier::Last => {
+            let current_weekday = now.weekday().num_days_from_monday();
+            let target_weekday = weekday.num_days_from_monday();
 
-    Ok(durations)
-}
-
-/// Combines the rule and amount into a `Duration`.
-///
-/// # Errors
-///
-/// This function will return an error if the pair contains values than can not be parsed into a `Duration`.
-fn create_duration(rule: Rule, amount: i64, in_or_ago: Rule) -> Result<Duration, ParseError> {
-    let dur = match rule {
-        Rule::Year => {
-            let now = now!();
-            let years: i32 = match amount.try_into() {
-                Ok(years) => years,
-                Err(_) => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
-            };
-            let next_year = match now.with_year(now.year() + years) {
-                Some(year) => year,
-                None => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
-            };
-            next_year - now
-        }
-        Rule::Month => {
-            let now = now!();
-            let months: u32 = match amount.try_into() {
-                Ok(months) => months,
-                Err(_) => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
-            };
-            let months = match in_or_ago {
-                Rule::Ago => {
-                    match now.checked_sub_months(Months::new(months)) {
-                        Some(month) => month,
-                        None => {
-                            return Err(ParseError::ValueInvalid {
-                                amount: amount.to_string(),
-                            })
-                        }
-                    }
-                }
-                Rule::In => {
-                    match now.with_month0((now.month0() + months) % 12) {
-                            Some(month) => month,
-                        None => {
-                            return Err(ParseError::ValueInvalid {
-                                amount: amount.to_string(),
-                            })
-                        }
-                    }
-                }
-                _ => {
-                    return Err(ParseError::ValueInvalid {
-                        amount: amount.to_string(),
-                    })
-                }
+            let offset = if target_weekday >= current_weekday {
+                7 + current_weekday - target_weekday
+            } else {
+                current_weekday - target_weekday
             };
 
-            // Must be a positive number
-            (months - now).abs()
-        }
-        Rule::Week => Duration::days(amount * 7),
-        Rule::Day => Duration::days(amount),
-        Rule::Hour => Duration::hours(amount),
-        Rule::Minute => Duration::minutes(amount),
-        Rule::Second => Duration::seconds(amount),
-        _ => unreachable!(),
-    };
-
-    Ok(dur)
-}
-
-/// Returns the `chrono::month` equivalent of a parser rule.
-///
-/// # Panics
-///
-/// Panics if the given rule does not correspond to a month.
-fn month_from_rule(rule: Rule) -> Month {
-    match rule {
-        Rule::January => Month::January,
-        Rule::February => Month::February,
-        Rule::March => Month::March,
-        Rule::April => Month::April,
-        Rule::May => Month::May,
-        Rule::June => Month::June,
-        Rule::July => Month::July,
-        Rule::August => Month::August,
-        Rule::September => Month::September,
-        Rule::October => Month::October,
-        Rule::November => Month::November,
-        Rule::December => Month::December,
-        _ => panic!("Tried to convert something that isn't a month to a month. This is a bug. Tried to convert: {:?}", rule),
-    }
-}
-
-/// Returns the `chrono::weekday` equivalent of a parser rule.
-///
-/// # Panics
-///
-/// Panics if the given rule does not correspond to a weekday.
-fn weekday_from_rule(rule: Rule) -> Weekday {
-    match rule {
-        Rule::Monday => Weekday::Mon,
-        Rule::Tuesday => Weekday::Tue,
-        Rule::Wednesday => Weekday::Wed,
-        Rule::Thursday => Weekday::Thu,
-        Rule::Friday => Weekday::Fri,
-        Rule::Saturday => Weekday::Sat,
-        Rule::Sunday => Weekday::Sun,
-        _ => {
-            panic!("Tried to convert {rule:?} to a weekday, which is not possible. This is a bug.")
+            now.checked_sub_days(Days::new(offset as u64))
+                .ok_or(ProcessingError::SubtractFromNow {
+                    unit: "days".to_string(),
+                    count: offset,
+                })
         }
     }
 }
@@ -513,17 +465,18 @@ mod tests {
                     #[test]
                     fn fn_name () {
                         let input = $case.to_lowercase();
-                        let result = from_human_time(&input).unwrap();
-                        let expected = NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S").unwrap().and_local_timezone(Local).unwrap();
+                        let now = NaiveDateTime::new(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+                        let result = from_human_time(&input, now).unwrap();
+                        let expected = NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S").unwrap();
 
                         let result = match result {
                             ParseResult::DateTime(datetime) => datetime,
-                            ParseResult::Date(date) => NaiveDateTime::new(date, now!().time()).and_local_timezone(Local).unwrap(),
-                            ParseResult::Time(time) => NaiveDateTime::new(now!().date_naive(), time).and_local_timezone(Local).unwrap(),
+                            ParseResult::Date(date) => NaiveDateTime::new(date, now.time()),
+                            ParseResult::Time(time) => NaiveDateTime::new(now.date(), time),
                         };
 
                         println!("Result: {result}\nExpected: {expected}\nNote: Maximum difference between these values allowed is 10ms.");
-                        assert!((result - expected).abs() < Duration::milliseconds(10));
+                        assert!((result - expected).abs() < chrono::Duration::milliseconds(10));
                     }
                 });
             )*
@@ -538,7 +491,8 @@ mod tests {
                     #[test]
                     fn fn_name () {
                         let input = $case.to_lowercase();
-                        let result = from_human_time(&input);
+                        let now = NaiveDateTime::new(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+                        let result = from_human_time(&input, now);
 
                         println!("Result: {result:#?}\nExpected: Error");
                         assert!(result.is_err());
@@ -549,11 +503,14 @@ mod tests {
     }
 
     generate_test_cases!(
+        "15:10" = "2010-01-01 15:10:00",
         "Today 18:30" = "2010-01-01 18:30:00",
         "Yesterday 18:30" = "2009-12-31 18:30:00",
         "Tomorrow 18:30" = "2010-01-02 18:30:00",
         "Overmorrow 18:30" = "2010-01-03 18:30:00",
         "2022-11-07 13:25:30" = "2022-11-07 13:25:30",
+        "07 February 2015" = "2015-02-07 00:00:00",
+        "07 February" = "2010-02-07 00:00:00",
         "15:20 Friday" = "2010-01-08 15:20:00",
         "This Friday 17:00" = "2010-01-01 17:00:00",
         "Next Friday 17:00" = "2010-01-08 17:00:00",
@@ -566,6 +523,9 @@ mod tests {
         "This week Friday" = "2010-01-01 00:00:00",
         "This week Monday" = "2009-12-28 00:00:00",
         "Last week Tuesday" = "2009-12-22 00:00:00",
+        "This Friday" = "2010-01-01 00:00:00",
+        "Next Friday" = "2010-01-08 00:00:00",
+        "Last Friday" = "2009-12-25 00:00:00",
         "In 3 days" = "2010-01-04 00:00:00",
         "In 2 hours" = "2010-01-01 02:00:00",
         "In 5 minutes and 30 seconds" = "2010-01-01 00:05:30",
