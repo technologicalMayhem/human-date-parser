@@ -18,11 +18,11 @@ pub fn build_ast_from(str: &str) -> Result<HumanTime, ParseError> {
 
 #[derive(Parser)]
 #[grammar = "date_time.pest"]
-struct DateTimeParser;
+pub(crate) struct DateTimeParser;
 
 #[pest_consume::parser]
 impl DateTimeParser {
-    fn HumanTime(input: Node) -> ParserResult<HumanTime> {
+    pub(crate) fn HumanTime(input: Node) -> ParserResult<HumanTime> {
         Ok(match_nodes!(input.into_children();
             [DateTime(dt)] => HumanTime::DateTime(dt),
             [Date(d)] => HumanTime::Date(d),
@@ -353,76 +353,3 @@ impl From<Weekday> for chrono::Weekday {
 
 #[derive(Debug)]
 struct Week {}
-
-#[cfg(test)]
-#[allow(non_snake_case)]
-mod tests {
-    use concat_idents::concat_idents;
-    use pest_consume::Parser;
-
-    use super::{DateTimeParser, Rule};
-
-    macro_rules! generate_test_cases {
-        ( $( $case:literal ),* ) => {
-            $(
-                concat_idents!(fn_name = parse_, $case {
-                    #[test]
-                    fn fn_name () {
-                        let input = $case.to_lowercase();
-                        let result = DateTimeParser::parse(Rule::HumanTime, &input)
-                            .and_then(|result| result.single())
-                            .unwrap();
-
-                        DateTimeParser::HumanTime(result).unwrap();
-                    }
-                });
-            )*
-        };
-    }
-
-    generate_test_cases!(
-        "Today 18:30",
-        "Yesterday 18:30",
-        "Tomorrow 18:30",
-        "Overmorrow 18:30",
-        "2022-11-07 13:25:30",
-        "15:20 Friday",
-        "This Friday 17:00",
-        "Next Friday 17:00",
-        "13:25, Next Tuesday",
-        "Last Friday at 19:45",
-        "Next week",
-        "This week",
-        "Last week",
-        "Next week Monday",
-        "This week Friday",
-        "This week Monday",
-        "Last week Tuesday",
-        "In 3 days",
-        "In 2 hours",
-        "In 5 minutes and 30 seconds",
-        "10 seconds ago",
-        "10 hours and 5 minutes ago",
-        "2 hours, 32 minutes and 7 seconds ago",
-        "1 years, 2 months, 3 weeks, 5 days, 8 hours, 17 minutes and 45 seconds ago",
-        "1 year, 1 month, 1 week, 1 day, 1 hour, 1 minute and 1 second ago",
-        "A year ago",
-        "A month ago",
-        "3 months ago",
-        "6 months ago",
-        "7 months ago",
-        "In 7 months",
-        "A week ago",
-        "A day ago",
-        "An hour ago",
-        "A minute ago",
-        "A second ago",
-        "now",
-        "Overmorrow",
-        "7 days ago at 04:00",
-        "12 hours ago at 04:00",
-        "12 hours ago at today",
-        "12 hours ago at 7 days ago",
-        "7 days ago at 7 days ago"
-    );
-}
