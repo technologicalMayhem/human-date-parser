@@ -3,13 +3,12 @@ use super::*;
 use crate::ast::DateTimeParser;
 use crate::ast::Rule;
 use pest_consume::Parser;
-use concat_idents::concat_idents;
 
 /// Generates the test cases to remove a bunch of boilerplate code for the test setup.
 macro_rules! generate_test_cases {
         ( $( $case:literal = $expected:literal ),* ) => {
             $(
-                concat_idents!(ast_fn = build_ast_, $case {
+                concat_idents::concat_idents!(ast_fn = build_ast_, $case {
                     #[test]
                     fn ast_fn () {
                         let input = $case.to_lowercase();
@@ -21,7 +20,7 @@ macro_rules! generate_test_cases {
                     }
                 });
 
-                concat_idents!(parse_fn = parse_, $case {
+                concat_idents::concat_idents!(parse_fn = parse_, $case {
                     #[test]
                     fn parse_fn () {
                         let input = $case.to_lowercase();
@@ -47,7 +46,7 @@ macro_rules! generate_test_cases {
 macro_rules! generate_test_cases_error {
         ( $( $case:literal ),* ) => {
             $(
-                concat_idents!(fn_name = fail_parse_, $case {
+                concat_idents::concat_idents!(fn_name = fail_parse_, $case {
                     #[test]
                     fn fn_name () {
                         let input = $case.to_lowercase();
@@ -83,9 +82,27 @@ generate_test_cases!(
     "This week Friday" = "2010-01-01 00:00:00",
     "This week Monday" = "2009-12-28 00:00:00",
     "Last week Tuesday" = "2009-12-22 00:00:00",
-    "This Friday" = "2010-01-01 00:00:00",
-    "Next Friday" = "2010-01-08 00:00:00",
+    "Last Monday" = "2009-12-28 00:00:00",
+    "Last Tueday" = "2009-12-29 00:00:00",
+    "Last Wednesday" = "2009-12-30 00:00:00",
+    "Last Thursday" = "2009-12-31 00:00:00",
     "Last Friday" = "2009-12-25 00:00:00",
+    "Last Saturday" = "2009-12-26 00:00:00",
+    "Last Sunday" = "2009-12-27 00:00:00",
+    "This Monday" = "2010-01-04 00:00:00",
+    "This Tueday" = "2010-01-05 00:00:00",
+    "This Wednesday" = "2010-01-06 00:00:00",
+    "This Thursday" = "2010-01-07 00:00:00",
+    "This Friday" = "2010-01-01 00:00:00",
+    "This Saturday" = "2010-01-02 00:00:00",
+    "This Sunday" = "2010-01-03 00:00:00",
+    "Next Monday" = "2010-01-04 00:00:00",
+    "Next Tueday" = "2010-01-05 00:00:00",
+    "Next Wednesday" = "2010-01-06 00:00:00",
+    "Next Thursday" = "2010-01-07 00:00:00",
+    "Next Friday" = "2010-01-08 00:00:00",
+    "Next Saturday" = "2010-01-02 00:00:00",
+    "Next Sunday" = "2010-01-03 00:00:00",
     "In 3 days" = "2010-01-04 00:00:00",
     "In 2 hours" = "2010-01-01 02:00:00",
     "In 5 minutes and 30 seconds" = "2010-01-01 00:05:30",
