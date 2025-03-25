@@ -11,7 +11,7 @@ Since I people actually use my library, I want to improve it and make it more ma
    * Include these examples in the documentation and as standalone example files.
 - [ ] Logging
    * Debugging the code is not all too easy. Making logging possible at certain parts of it would help.
-- [ ] Implement change log
+- [x] Implement change log
    * Follow guidelines from [keepachangelog](https://keepachangelog.com/en/1.1.0/)
 - [ ] Error Handling:
    * Error handling can be more detailed and specific, especially in cases where multiple potential causes exist for a failure.
