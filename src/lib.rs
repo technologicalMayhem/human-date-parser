@@ -77,21 +77,56 @@ impl Display for ParseResult {
     }
 }
 
-/// Converts a human expression of a date into a more usable one.
+/// Parses a human-readable date or time string and converts it into a structured date/time format.
+///
+/// This function takes a string representing a human-readable date/time expression (e.g.,
+/// "Last Friday at 19:45") and attempts to parse it into one of three possible formats:
+/// `NaiveDateTime`, `NaiveDate`, or `NaiveTime`. The function requires a reference date (`now`)
+/// to properly resolve relative time expressions.
+///
+/// # Parameters
+///
+/// - `str`: A human-readable date/time string (e.g., "yesterday", "next Monday at 14:00").
+/// - `now`: The reference `NaiveDateTime` representing the current time, used for resolving
+///   relative expressions like "yesterday" or "next week".
+///
+/// # Returns
+///
+/// - `Ok(ParseResult::DateTime(dt))` if the input string represents a full date and time.
+/// - `Ok(ParseResult::Date(d))` if the input string represents only a date.
+/// - `Ok(ParseResult::Time(t))` if the input string represents only a time.
+/// - `Err(ParseError)` if parsing fails due to an unrecognized or invalid format.
 ///
 /// # Errors
 ///
-/// This function will return an error if the string contains values than can not be parsed into a date.
+/// This function returns an error if the input string contains values that cannot be parsed
+/// into a valid date or time.
 ///
 /// # Examples
+///
 /// ```
 /// use chrono::Local;
 /// use human_date_parser::{from_human_time, ParseResult};
+///
 /// let now = Local::now().naive_local();
 /// let date = from_human_time("Last Friday at 19:45", now).unwrap();
+///
 /// match date {
 ///     ParseResult::DateTime(date) => println!("{date}"),
-///     _ => unreachable!()
+///     _ => unreachable!(),
+/// }
+/// ```
+///
+/// ```
+/// use chrono::Local;
+/// use human_date_parser::{from_human_time, ParseResult};
+///
+/// let now = Local::now().naive_local();
+/// let date = from_human_time("Next Monday", now).unwrap();
+///
+/// match date {
+///     ParseResult::Date(date) => println!("{date}"),
+///     _ => unreachable!(),
 /// }
 /// ```
 pub fn from_human_time(str: &str, now: NaiveDateTime) -> Result<ParseResult, ParseError> {
