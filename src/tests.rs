@@ -26,7 +26,7 @@ macro_rules! generate_test_cases {
                         let input = $case.to_lowercase();
                         let now = NaiveDateTime::new(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
                         let result = from_human_time(&input, now).unwrap();
-                        let expected = NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S").unwrap();
+                        let expected = NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S").or(NaiveDateTime::parse_from_str( $expected , "%Y-%m-%d %H:%M:%S%.f")).unwrap();
 
                         let result = match result {
                             ParseResult::DateTime(datetime) => datetime,
@@ -34,8 +34,8 @@ macro_rules! generate_test_cases {
                             ParseResult::Time(time) => NaiveDateTime::new(now.date(), time),
                         };
 
-                        println!("Result: {result}\nExpected: {expected}\nNote: Maximum difference between these values allowed is 10ms.");
-                        assert!((result - expected).abs() < chrono::Duration::milliseconds(10));
+                        println!("Result: {result}\nExpected: {expected}");
+                        assert!((result - expected).abs() == chrono::Duration::zero());
                     }
                 });
             )*
@@ -105,6 +105,9 @@ generate_test_cases!(
     "Next Sunday" = "2010-01-03 00:00:00",
     "In 3 days" = "2010-01-04 00:00:00",
     "In 2 hours" = "2010-01-01 02:00:00",
+    "In 20 milliseconds" = "2010-01-01 00:00:00.020",
+    "In 20 microseconds" = "2010-01-01 00:00:00.000020",
+    "In 20 nanoseconds" = "2010-01-01 00:00:00.000000020",
     "In 5 minutes and 30 seconds" = "2010-01-01 00:05:30",
     "10 seconds ago" = "2009-12-31 23:59:50",
     "10 hours and 5 minutes ago" = "2009-12-31 13:55:00",
@@ -123,6 +126,9 @@ generate_test_cases!(
     "An hour ago" = "2009-12-31 23:00:00",
     "A minute ago" = "2009-12-31 23:59:00",
     "A second ago" = "2009-12-31 23:59:59",
+    "A millisecond ago" = "2009-12-31 23:59:59.999",
+    "A microsecond ago" = "2009-12-31 23:59:59.999999",
+    "A nanosecond ago" = "2009-12-31 23:59:59.999999999",
     "now" = "2010-01-01 00:00:00",
     "Overmorrow" = "2010-01-03 00:00:00",
     "7 days ago at 04:00" = "2009-12-25 04:00:00",

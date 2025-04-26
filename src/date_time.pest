@@ -73,6 +73,9 @@ TimeUnit = {
     | Week
     | Day
     | Hour
+    | Millisecond
+    | Microsecond
+    | Nanosecond
     | Minute
     | Second
 }
@@ -84,6 +87,9 @@ Day = { "day" ~ ( "s" )? | "d" }
 Hour = { "hour" ~ ( "s" )? | "h" }
 Minute = { ("minute" | "min") ~ ( "s" )? | "m" }
 Second = { ("second" | "sec") ~ ( "s" )? | "s" }
+Millisecond = { "millisecond" ~ ( "s" )? | "ms" }
+Microsecond = { "microsecond" ~ ( "s" )? | "µs" }
+Nanosecond = { "nanosecond" ~ ( "s" )? | "ns" }
 
 Weekday = {
     | Monday

@@ -5,8 +5,8 @@ use ast::{
     RelativeSpecifier, Time, TimeUnit,
 };
 use chrono::{
-    Datelike, Days, Duration as ChronoDuration, Month, Months, NaiveDate, NaiveDateTime,
-    NaiveTime, Weekday,
+    Datelike, Days, Duration as ChronoDuration, Month, Months, NaiveDate, NaiveDateTime, NaiveTime,
+    Weekday,
 };
 use thiserror::Error;
 
@@ -132,7 +132,7 @@ impl Display for ParseResult {
 pub fn from_human_time(str: &str, now: NaiveDateTime) -> Result<ParseResult, ParseError> {
     let lowercase = str.to_lowercase();
     let parsed = build_ast_from(&lowercase)?;
-
+    println!("{parsed:#?}");
     parse_human_time(parsed, now)
 }
 
@@ -384,6 +384,27 @@ fn apply_duration(
                     dt = dt - ChronoDuration::seconds(seconds as i64)
                 }
             }
+            Quantifier::Millisecond(milliseconds) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::milliseconds(milliseconds as i64)
+                } else {
+                    dt = dt - ChronoDuration::milliseconds(milliseconds as i64)
+                }
+            }
+            Quantifier::Microsecond(microseconds) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::microseconds(microseconds as i64)
+                } else {
+                    dt = dt - ChronoDuration::microseconds(microseconds as i64)
+                }
+            },
+            Quantifier::Nanosecond(nanoseconds) => {
+                if direction == Direction::Forwards {
+                    dt = dt + ChronoDuration::nanoseconds(nanoseconds as i64)
+                } else {
+                    dt = dt - ChronoDuration::nanoseconds(nanoseconds as i64)
+                }
+            }
         };
     }
 
@@ -400,16 +421,24 @@ fn relative_date_time_unit(
         TimeUnit::Month => Quantifier::Month(1),
         TimeUnit::Week => Quantifier::Week(1),
         TimeUnit::Day => Quantifier::Day(1),
-        TimeUnit::Hour | TimeUnit::Minute | TimeUnit::Second => {
+        TimeUnit::Hour
+        | TimeUnit::Minute
+        | TimeUnit::Second
+        | TimeUnit::Millisecond
+        | TimeUnit::Microsecond
+        | TimeUnit::Nanosecond => {
             unreachable!("Non-date time units should never be used in this function.")
         }
     };
 
-
     match relative {
         RelativeSpecifier::This => Ok(now),
-        RelativeSpecifier::Next => apply_duration(AstDuration(vec![quantifier]), now, Direction::Forwards),
-        RelativeSpecifier::Last => apply_duration(AstDuration(vec![quantifier]), now, Direction::Backwards),
+        RelativeSpecifier::Next => {
+            apply_duration(AstDuration(vec![quantifier]), now, Direction::Forwards)
+        }
+        RelativeSpecifier::Last => {
+            apply_duration(AstDuration(vec![quantifier]), now, Direction::Backwards)
+        }
     }
 }
 

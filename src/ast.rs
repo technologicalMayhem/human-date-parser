@@ -123,6 +123,9 @@ impl DateTimeParser {
                 TimeUnit::Hour => Quantifier::Hour(1),
                 TimeUnit::Minute => Quantifier::Minute(1),
                 TimeUnit::Second => Quantifier::Second(1),
+                TimeUnit::Millisecond => Quantifier::Millisecond(1),
+                TimeUnit::Microsecond => Quantifier::Microsecond(1),
+                TimeUnit::Nanosecond => Quantifier::Nanosecond(1),
             }
         ))
     }
@@ -161,6 +164,9 @@ impl DateTimeParser {
                 TimeUnit::Hour => Quantifier::Hour(n),
                 TimeUnit::Minute => Quantifier::Minute(n),
                 TimeUnit::Second => Quantifier::Second(n),
+                TimeUnit::Millisecond => Quantifier::Millisecond(n),
+                TimeUnit::Microsecond => Quantifier::Microsecond(n),
+                TimeUnit::Nanosecond => Quantifier::Nanosecond(n),
             }
         ))
     }
@@ -175,6 +181,9 @@ impl DateTimeParser {
                 Rule::Hour => TimeUnit::Hour,
                 Rule::Minute => TimeUnit::Minute,
                 Rule::Second => TimeUnit::Second,
+                Rule::Millisecond => TimeUnit::Millisecond,
+                Rule::Microsecond => TimeUnit::Microsecond,
+                Rule::Nanosecond => TimeUnit::Nanosecond,
                 _ => unreachable!(),
             })
         } else {
@@ -313,6 +322,9 @@ pub enum Quantifier {
     Hour(u32),
     Minute(u32),
     Second(u32),
+    Millisecond(u32),
+    Microsecond(u32),
+    Nanosecond(u32),
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -324,6 +336,9 @@ pub enum TimeUnit {
     Hour,
     Minute,
     Second,
+    Millisecond,
+    Microsecond,
+    Nanosecond,
 }
 
 #[derive(Debug)]
