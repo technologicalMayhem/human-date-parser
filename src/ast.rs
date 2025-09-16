@@ -11,7 +11,9 @@ pub fn build_ast_from(str: &str) -> Result<HumanTime, ParseError> {
     let result = DateTimeParser::parse(Rule::HumanTime, &str)
         .and_then(|result| result.single())
         .map_err(|_| ParseError::InvalidFormat)?;
-
+    if result.as_str() != str {
+        return Err(ParseError::InvalidFormat);
+    }
     DateTimeParser::HumanTime(result)
         .map_err(|_| ParseError::InternalError(InternalError::FailedToBuildAst))
 }

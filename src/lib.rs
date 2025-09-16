@@ -130,7 +130,7 @@ impl Display for ParseResult {
 /// }
 /// ```
 pub fn from_human_time(str: &str, now: NaiveDateTime) -> Result<ParseResult, ParseError> {
-    let lowercase = str.to_lowercase();
+    let lowercase = str.trim().to_lowercase();
     let parsed = build_ast_from(&lowercase)?;
     println!("{parsed:#?}");
     parse_human_time(parsed, now)
