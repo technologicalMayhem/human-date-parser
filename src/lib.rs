@@ -10,7 +10,7 @@ use chrono::{
 };
 use thiserror::Error;
 
-use crate::ast::{IsoDateTime, IsoTime, TzDirection, TzSpecifier};
+use crate::ast::{IsoDateTime, IsoTime, TzDirection, TzSpecifier, WeekNumDay};
 
 mod ast;
 #[cfg(test)]
@@ -63,6 +63,10 @@ pub enum ProcessingError {
     InnerHumanTimeParse(Box<ParseError>),
     #[error("{0} is not a valid time zone offset")]
     InvalidOffset(i32),
+    #[error("There is no day {days} in the year {year}")]
+    InvalidDayOfYear { year: u32, days: u32 },
+    #[error("{0:?} is not a valid iso week")]
+    InvalidIsoWeek(WeekNumDay),
 }
 
 #[derive(Debug, Error)]
@@ -200,7 +204,8 @@ fn parse_iso_date_time(
     let date = date.unwrap();
     let time = time.unwrap();
     let offset = offset.unwrap();
-    let datetime = NaiveDateTime::new(date, time) - ChronoDuration::seconds(offset.local_minus_utc() as i64);
+    let datetime =
+        NaiveDateTime::new(date, time) - ChronoDuration::seconds(offset.local_minus_utc() as i64);
 
     Ok(chrono::DateTime::from_naive_utc_and_offset(
         datetime, offset,
@@ -297,12 +302,28 @@ fn parse_date(date: Date, now: &NaiveDateTime) -> Result<NaiveDate, ProcessingEr
 }
 
 fn parse_iso_date(iso_date: IsoDate) -> Result<NaiveDate, ProcessingError> {
-    let (year, month, day) = (iso_date.year as i32, iso_date.month, iso_date.day);
-    NaiveDate::from_ymd_opt(year, month, day).ok_or(ProcessingError::InvalidDate {
-        year,
-        month,
-        day,
-    })
+    match iso_date {
+        IsoDate::YearMonthDay(iso_date) => {
+            let (year, month, day) = (iso_date.year as i32, iso_date.month, iso_date.day);
+            NaiveDate::from_ymd_opt(year, month, day).ok_or(ProcessingError::InvalidDate {
+                year,
+                month,
+                day,
+            })
+        }
+        IsoDate::DayOfYear(day_of_year) => NaiveDate::from_ymd_opt(day_of_year.year as i32, 1, 1)
+            .and_then(|date| date.checked_add_days(Days::new((day_of_year.days - 1) as u64)))
+            .ok_or(ProcessingError::InvalidDayOfYear {
+                year: day_of_year.year,
+                days: day_of_year.days,
+            }),
+        IsoDate::WeekNumDay(iso_week) => Weekday::try_from((iso_week.day - 1) as u8)
+            .ok()
+            .and_then(|weekday| {
+                NaiveDate::from_isoywd_opt(iso_week.year as i32, iso_week.week, weekday)
+            })
+            .ok_or(ProcessingError::InvalidIsoWeek(iso_week)),
+    }
 }
 
 fn parse_day_month_year(day: u32, month: Month, year: i32) -> Result<NaiveDate, ProcessingError> {
@@ -330,7 +351,7 @@ fn parse_time(time: Time) -> Result<NaiveTime, ProcessingError> {
 }
 
 fn parse_in(in_ast: In, now: &NaiveDateTime) -> Result<NaiveDateTime, ProcessingError> {
-    let dt = now.clone();
+    let dt = now.clone(); 
     apply_duration(in_ast.0, dt, Direction::Forwards)
 }
 
@@ -478,7 +499,7 @@ fn apply_duration(
                 } else {
                     dt = dt - ChronoDuration::microseconds(microseconds as i64)
                 }
-            },
+            }
             Quantifier::Nanosecond(nanoseconds) => {
                 if direction == Direction::Forwards {
                     dt = dt + ChronoDuration::nanoseconds(nanoseconds as i64)

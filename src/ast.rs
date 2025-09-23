@@ -61,9 +61,15 @@ impl DateTimeParser {
 
     fn IsoDate(input: Node) -> ParserResult<IsoDate> {
         Ok(match_nodes!(input.into_children();
-            [Num(year), Num(month), Num(day)] => IsoDate{year, month, day},
+            [Num(year), Num(month), Num(day)] => IsoDate::YearMonthDay(IsoDateYearMonthDay {year, month, day}),
+            [Num(year), WeekNum(week), Num(day)] => IsoDate::WeekNumDay(WeekNumDay { year, week, day }),
+            [Num(year), Num(days)] => IsoDate::DayOfYear(DayOfYear { year, days }),
         ))
     }
+
+    fn WeekNum(input: Node) -> ParserResult<u32> {
+        input.as_str().trim_start_matches("w").parse().map_err(|e| input.error(e))
+    } 
 
     fn Date(input: Node) -> ParserResult<Date> {
         Ok(match_nodes!(input.into_children();
@@ -121,6 +127,8 @@ impl DateTimeParser {
 
     fn IsoTime(input: Node) -> ParserResult<(IsoTime, Option<TzSpecifier>)> {
         Ok(match_nodes!(input.into_children();
+            [Num(hour)] => (IsoTime {hour, minute: 0, second: 0, nanosecond: 0}, None),
+            [Num(hour), TzSpecifier(tz)] => (IsoTime {hour, minute: 0, second: 0, nanosecond: 0}, Some(tz)),
             [Num(hour), Num(minute)] => (IsoTime { hour, minute, second: 0, nanosecond: 0 }, None),
             [Num(hour), Num(minute), TzSpecifier(tz)] => (IsoTime { hour, minute, second: 0, nanosecond: 0 }, Some(tz)),
             [Num(hour), Num(minute), Num(second)] => (IsoTime { hour, minute, second, nanosecond: 0 }, None),
@@ -315,9 +323,29 @@ pub struct DateTime {
 }
 
 #[derive(Debug)]
-pub struct IsoDate {
+pub enum IsoDate {
+    YearMonthDay(IsoDateYearMonthDay),
+    DayOfYear(DayOfYear),
+    WeekNumDay(WeekNumDay)
+}
+
+#[derive(Debug)]
+pub struct IsoDateYearMonthDay {
     pub year: u32,
     pub month: u32,
+    pub day: u32,
+}
+
+#[derive(Debug)]
+pub struct DayOfYear {
+    pub year: u32,
+    pub days: u32,
+}
+
+#[derive(Debug)]
+pub struct WeekNumDay {
+    pub year: u32,
+    pub week: u32,
     pub day: u32,
 }
 

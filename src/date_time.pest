@@ -15,7 +15,8 @@ DateTime = {
     | Time ~ (",")? ~ Date
 }
 IsoDateTime = ${ IsoDate ~ "t" ~ IsoTime }
-IsoDate = ${ Num ~ "-" ~ Num ~ "-" ~ Num }
+IsoDate = ${ Num ~ "-" ~ Num ~ "-" ~ Num | Num ~ "-" ~ WeekNum ~ "-" ~ Num | Num ~ "-" ~ Num }
+WeekNum = ${ "w" ~ Num }
 Date = {
     | Today
     | Tomorrow
