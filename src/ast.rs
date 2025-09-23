@@ -121,13 +121,18 @@ impl DateTimeParser {
 
     fn IsoTime(input: Node) -> ParserResult<(IsoTime, Option<TzSpecifier>)> {
         Ok(match_nodes!(input.into_children();
-            [Num(hour), Num(minute)] => (IsoTime { hour, minute, second: 0, millisecond: 0 }, None),
-            [Num(hour), Num(minute), TzSpecifier(tz)] => (IsoTime { hour, minute, second: 0, millisecond: 0 }, Some(tz)),
-            [Num(hour), Num(minute), Num(second)] => (IsoTime { hour, minute, second, millisecond: 0 }, None),
-            [Num(hour), Num(minute), Num(second), Num(millisecond)] => (IsoTime { hour, minute, second, millisecond }, None),
-            [Num(hour), Num(minute), Num(second), TzSpecifier(tz)] => (IsoTime { hour, minute, second, millisecond: 0 }, Some(tz)),
-            [Num(hour), Num(minute), Num(second), Num(millisecond), TzSpecifier(tz)] => (IsoTime { hour, minute, second, millisecond }, Some(tz)),
+            [Num(hour), Num(minute)] => (IsoTime { hour, minute, second: 0, nanosecond: 0 }, None),
+            [Num(hour), Num(minute), TzSpecifier(tz)] => (IsoTime { hour, minute, second: 0, nanosecond: 0 }, Some(tz)),
+            [Num(hour), Num(minute), Num(second)] => (IsoTime { hour, minute, second, nanosecond: 0 }, None),
+            [Num(hour), Num(minute), Num(second), NumNanosecond(nanosecond)] => (IsoTime { hour, minute, second, nanosecond }, None),
+            [Num(hour), Num(minute), Num(second), TzSpecifier(tz)] => (IsoTime { hour, minute, second, nanosecond: 0 }, Some(tz)),
+            [Num(hour), Num(minute), Num(second), NumNanosecond(nanosecond), TzSpecifier(tz)] => (IsoTime { hour, minute, second, nanosecond }, Some(tz)),
         ))
+    }
+
+    fn NumNanosecond(input: Node) -> ParserResult<u32> {
+        let nanoseconds = format!("{:0<9}", input.as_str());
+        nanoseconds[0..9].parse::<u32>().map_err(|e| input.error(e))
     }
 
     fn TzSpecifier(input: Node) -> ParserResult<TzSpecifier> {
@@ -351,7 +356,7 @@ pub struct IsoTime {
     pub hour: u32,
     pub minute: u32,
     pub second: u32,
-    pub millisecond: u32,
+    pub nanosecond: u32,
 }
 
 #[derive(Debug)]

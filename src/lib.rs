@@ -20,7 +20,7 @@ mod tests;
 pub enum ParseError {
     #[error("Could not match input to any known format")]
     InvalidFormat,
-    #[error("One or more errors occured when processing input")]
+    #[error("One or more errors occured when processing input. {0:?}")]
     ProccessingErrors(Vec<ProcessingError>),
     #[error(
         "An internal library error occured. This should not happen. Please report it. Error: {0}"
@@ -208,12 +208,12 @@ fn parse_iso_date_time(
 }
 
 fn parse_iso_time(time: IsoTime) -> Result<NaiveTime, ProcessingError> {
-    NaiveTime::from_hms_milli_opt(time.hour, time.minute, time.second, time.millisecond).ok_or(
+    NaiveTime::from_hms_nano_opt(time.hour, time.minute, time.second, time.nanosecond).ok_or(
         ProcessingError::TimeHourMinuteSecondMillisecond {
             hour: time.hour,
             minute: time.minute,
             second: time.second,
-            millisecond: time.millisecond,
+            millisecond: time.nanosecond,
         },
     )
 }
