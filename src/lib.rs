@@ -5,10 +5,12 @@ use ast::{
     RelativeSpecifier, Time, TimeUnit,
 };
 use chrono::{
-    Datelike, Days, Duration as ChronoDuration, Month, Months, NaiveDate, NaiveDateTime, NaiveTime,
-    Weekday,
+    Datelike, Days, Duration as ChronoDuration, FixedOffset, Month, Months, NaiveDate,
+    NaiveDateTime, NaiveTime, Weekday,
 };
 use thiserror::Error;
+
+use crate::ast::{IsoDateTime, IsoTime, TzDirection, TzSpecifier};
 
 mod ast;
 #[cfg(test)]
@@ -32,6 +34,13 @@ pub enum ProcessingError {
     TimeHourMinute { hour: u32, minute: u32 },
     #[error("Could not build time from {hour}:{minute}:{second}")]
     TimeHourMinuteSecond { hour: u32, minute: u32, second: u32 },
+    #[error("Could not build time from {hour}:{minute}:{second}.{millisecond}")]
+    TimeHourMinuteSecondMillisecond {
+        hour: u32,
+        minute: u32,
+        second: u32,
+        millisecond: u32,
+    },
     #[error("Failed to add {count} {unit} to the current time")]
     AddToNow { unit: String, count: u32 },
     #[error("Failed to subtract {count} {unit} from the current time")]
@@ -52,6 +61,8 @@ pub enum ProcessingError {
     InvalidDate { year: i32, month: u32, day: u32 },
     #[error("Failed to parse inner human time: {0}")]
     InnerHumanTimeParse(Box<ParseError>),
+    #[error("{0} is not a valid time zone offset")]
+    InvalidOffset(i32),
 }
 
 #[derive(Debug, Error)]
@@ -65,6 +76,7 @@ pub enum ParseResult {
     DateTime(NaiveDateTime),
     Date(NaiveDate),
     Time(NaiveTime),
+    DateTimeTz(chrono::DateTime<FixedOffset>),
 }
 
 impl Display for ParseResult {
@@ -73,6 +85,7 @@ impl Display for ParseResult {
             ParseResult::DateTime(datetime) => write!(f, "{}", datetime),
             ParseResult::Date(date) => write!(f, "{}", date),
             ParseResult::Time(time) => write!(f, "{}", time),
+            ParseResult::DateTimeTz(datetime) => write!(f, "{}", datetime.to_rfc3339()),
         }
     }
 }
@@ -153,7 +166,75 @@ fn parse_human_time(parsed: ast::HumanTime, now: NaiveDateTime) -> Result<ParseR
             .map(|time| ParseResult::DateTime(time))
             .map_err(|err| ParseError::ProccessingErrors(vec![err])),
         ast::HumanTime::Now => Ok(ParseResult::DateTime(now)),
+        ast::HumanTime::IsoDateTime(iso_date_time) => {
+            parse_iso_date_time(iso_date_time).map(|date| ParseResult::DateTimeTz(date))
+        }
     }
+}
+
+fn parse_iso_date_time(
+    iso_date_time: IsoDateTime,
+) -> Result<chrono::DateTime<FixedOffset>, ParseError> {
+    let date = parse_iso_date(iso_date_time.date);
+    let time = parse_iso_time(iso_date_time.time);
+    let offset = parse_tz_specifier(iso_date_time.time_zone);
+
+    let mut errors = Vec::new();
+    let date = date.map_err(|e| {
+        errors.push(e);
+        ()
+    });
+    let time = time.map_err(|e| {
+        errors.push(e);
+        ()
+    });
+    let offset = offset.map_err(|e| {
+        errors.push(e);
+        ()
+    });
+
+    if !errors.is_empty() {
+        return Err(ParseError::ProccessingErrors(errors));
+    }
+
+    let date = date.unwrap();
+    let time = time.unwrap();
+    let offset = offset.unwrap();
+    let datetime = NaiveDateTime::new(date, time) - ChronoDuration::seconds(offset.local_minus_utc() as i64);
+
+    Ok(chrono::DateTime::from_naive_utc_and_offset(
+        datetime, offset,
+    ))
+}
+
+fn parse_iso_time(time: IsoTime) -> Result<NaiveTime, ProcessingError> {
+    NaiveTime::from_hms_milli_opt(time.hour, time.minute, time.second, time.millisecond).ok_or(
+        ProcessingError::TimeHourMinuteSecondMillisecond {
+            hour: time.hour,
+            minute: time.minute,
+            second: time.second,
+            millisecond: time.millisecond,
+        },
+    )
+}
+
+fn parse_tz_specifier(tz_specifier: Option<TzSpecifier>) -> Result<FixedOffset, ProcessingError> {
+    let Some(tz_specifier) = tz_specifier else {
+        return FixedOffset::west_opt(0).ok_or(ProcessingError::InvalidOffset(0));
+    };
+    const HOUR: u32 = 3600;
+    const MINUTE: u32 = 60;
+    let offset = (tz_specifier.hour * HOUR + tz_specifier.minute * MINUTE) as i32;
+    let direction = if tz_specifier.direction == TzDirection::Positive {
+        1
+    } else {
+        -1
+    };
+    let result = match tz_specifier.direction {
+        TzDirection::Positive => FixedOffset::east_opt(offset),
+        TzDirection::Negative => FixedOffset::west_opt(offset),
+    };
+    result.ok_or(ProcessingError::InvalidOffset(offset * direction))
 }
 
 fn parse_date_time(date_time: DateTime, now: &NaiveDateTime) -> Result<NaiveDateTime, ParseError> {
@@ -266,6 +347,7 @@ fn parse_ago(ago: Ago, now: &NaiveDateTime) -> Result<NaiveDateTime, ProcessingE
                 ParseResult::DateTime(dt) => dt,
                 ParseResult::Date(date) => NaiveDateTime::new(date, now.time()),
                 ParseResult::Time(time) => NaiveDateTime::new(now.date(), time),
+                ParseResult::DateTimeTz(date_time) => date_time.naive_utc(),
             };
             apply_duration(ago, dt, Direction::Backwards)
         }

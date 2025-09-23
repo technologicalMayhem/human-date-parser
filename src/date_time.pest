@@ -1,4 +1,7 @@
+Input = { SOI ~ HumanTime ~ EOI }
+
 HumanTime = {
+    | IsoDateTime
     | DateTime
     | Date
     | ("at")? ~ Time
@@ -11,6 +14,7 @@ DateTime = {
     | Date ~ (AtLiteral)? ~ Time
     | Time ~ (",")? ~ Date
 }
+IsoDateTime = ${ IsoDate ~ "t" ~ IsoTime }
 IsoDate = ${ Num ~ "-" ~ Num ~ "-" ~ Num }
 Date = {
     | Today
@@ -34,6 +38,9 @@ Overmorrow = { "overmorrow" }
 Time = ${ 
     | Num ~ ( ":" ~ Num ){1,2}
 }
+IsoTime = { Num ~ ( ":" ~ Num ){1,2} ~ ("." ~ Num)? ~ TzSpecifier? }
+TzSpecifier = { ( TzDirection ) ~ ( Num ~ (":" ~ Num)? ) | "z" }
+TzDirection = { "+" | "-" }
 
 In = { "in" ~ Duration }
 Ago = { Duration ~ AgoLiteral ~ (AtLiteral? ~ HumanTime)? }

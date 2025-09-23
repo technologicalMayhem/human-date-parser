@@ -29,6 +29,7 @@ fn main() {
             }
             ParseResult::Date(date) => println!("Date: {date}\n"),
             ParseResult::Time(time) => println!("Time: {time}\n"),
+            ParseResult::DateTimeTz(date_time) => println!("Time: {date_time}"),
         };
     }
 }

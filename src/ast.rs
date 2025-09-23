@@ -8,13 +8,13 @@ type ParserResult<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
 pub fn build_ast_from(str: &str) -> Result<HumanTime, ParseError> {
-    let result = DateTimeParser::parse(Rule::HumanTime, &str)
+    let result = DateTimeParser::parse(Rule::Input, &str)
         .and_then(|result| result.single())
         .map_err(|_| ParseError::InvalidFormat)?;
     if result.as_str() != str {
         return Err(ParseError::InvalidFormat);
     }
-    DateTimeParser::HumanTime(result)
+    DateTimeParser::Input(result)
         .map_err(|_| ParseError::InternalError(InternalError::FailedToBuildAst))
 }
 
@@ -24,14 +24,31 @@ pub(crate) struct DateTimeParser;
 
 #[pest_consume::parser]
 impl DateTimeParser {
-    pub(crate) fn HumanTime(input: Node) -> ParserResult<HumanTime> {
+    pub(crate) fn Input(input: Node) -> ParserResult<HumanTime> {
         Ok(match_nodes!(input.into_children();
+            [HumanTime(ht), _] => ht,
+        ))
+    }
+
+    fn HumanTime(input: Node) -> ParserResult<HumanTime> {
+        Ok(match_nodes!(input.into_children();
+            [IsoDateTime(dt)] => HumanTime::IsoDateTime(dt),
             [DateTime(dt)] => HumanTime::DateTime(dt),
             [Date(d)] => HumanTime::Date(d),
             [Time(t)] => HumanTime::Time(t),
             [In(i)] => HumanTime::In(i),
             [Ago(a)] => HumanTime::Ago(a),
             [Now(_)] => HumanTime::Now,
+        ))
+    }
+
+    fn EOI(input: Node) -> ParserResult<()> {
+        Ok(())
+    }
+
+    fn IsoDateTime(input: Node) -> ParserResult<IsoDateTime> {
+        Ok(match_nodes!(input.into_children();
+            [IsoDate(date), IsoTime(iso_time)] => IsoDateTime{ date, time: iso_time.0, time_zone: iso_time.1 },
         ))
     }
 
@@ -100,6 +117,41 @@ impl DateTimeParser {
             [Num(h), Num(m)] => Time::HourMinute(h, m),
             [Num(h), Num(m), Num(s)] => Time::HourMinuteSecond(h, m, s),
         ))
+    }
+
+    fn IsoTime(input: Node) -> ParserResult<(IsoTime, Option<TzSpecifier>)> {
+        Ok(match_nodes!(input.into_children();
+            [Num(hour), Num(minute)] => (IsoTime { hour, minute, second: 0, millisecond: 0 }, None),
+            [Num(hour), Num(minute), TzSpecifier(tz)] => (IsoTime { hour, minute, second: 0, millisecond: 0 }, Some(tz)),
+            [Num(hour), Num(minute), Num(second)] => (IsoTime { hour, minute, second, millisecond: 0 }, None),
+            [Num(hour), Num(minute), Num(second), Num(millisecond)] => (IsoTime { hour, minute, second, millisecond }, None),
+            [Num(hour), Num(minute), Num(second), TzSpecifier(tz)] => (IsoTime { hour, minute, second, millisecond: 0 }, Some(tz)),
+            [Num(hour), Num(minute), Num(second), Num(millisecond), TzSpecifier(tz)] => (IsoTime { hour, minute, second, millisecond }, Some(tz)),
+        ))
+    }
+
+    fn TzSpecifier(input: Node) -> ParserResult<TzSpecifier> {
+        if input.as_str() == "z" {
+            return Ok(TzSpecifier {
+                direction: TzDirection::Positive,
+                hour: 0,
+                minute: 0,
+            });
+        };
+        Ok(match_nodes!(input.into_children();
+            [TzDirection(direction), Num(hour)] => TzSpecifier { direction, hour, minute: 0 },
+            [TzDirection(direction), Num(hour), Num(minute)] => TzSpecifier { direction, hour, minute },
+        ))
+    }
+
+    fn TzDirection(input: Node) -> ParserResult<TzDirection> {
+        if input.as_str() == "+" {
+            Ok(TzDirection::Positive)
+        } else if input.as_str() == "-" {
+            Ok(TzDirection::Negative)
+        } else {
+            unreachable!("This should not happen");
+        }
     }
 
     fn In(input: Node) -> ParserResult<In> {
@@ -235,12 +287,20 @@ impl DateTimeParser {
 
 #[derive(Debug)]
 pub enum HumanTime {
+    IsoDateTime(IsoDateTime),
     DateTime(DateTime),
     Date(Date),
     Time(Time),
     In(In),
     Ago(Ago),
     Now,
+}
+
+#[derive(Debug)]
+pub struct IsoDateTime {
+    pub date: IsoDate,
+    pub time: IsoTime,
+    pub time_zone: Option<TzSpecifier>,
 }
 
 #[derive(Debug)]
@@ -284,6 +344,27 @@ struct Overmorrow;
 pub enum Time {
     HourMinute(u32, u32),
     HourMinuteSecond(u32, u32, u32),
+}
+
+#[derive(Debug)]
+pub struct IsoTime {
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    pub millisecond: u32,
+}
+
+#[derive(Debug)]
+pub struct TzSpecifier {
+    pub direction: TzDirection,
+    pub hour: u32,
+    pub minute: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum TzDirection {
+    Positive,
+    Negative,
 }
 
 #[derive(Debug)]

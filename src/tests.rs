@@ -12,11 +12,11 @@ macro_rules! generate_test_cases {
                     #[test]
                     fn ast_fn () {
                         let input = $case.to_lowercase();
-                        let result = DateTimeParser::parse(Rule::HumanTime, &input)
+                        let result = DateTimeParser::parse(Rule::Input, &input)
                             .and_then(|result| result.single())
                             .unwrap();
 
-                        DateTimeParser::HumanTime(result).unwrap();
+                        DateTimeParser::Input(result).unwrap();
                     }
                 });
 
@@ -32,6 +32,7 @@ macro_rules! generate_test_cases {
                             ParseResult::DateTime(datetime) => datetime,
                             ParseResult::Date(date) => NaiveDateTime::new(date, now.time()),
                             ParseResult::Time(time) => NaiveDateTime::new(now.date(), time),
+                            ParseResult::DateTimeTz(datetime) => datetime.naive_utc(),
                         };
 
                         println!("Result: {result}\nExpected: {expected}");
@@ -135,7 +136,13 @@ generate_test_cases!(
     "12 hours ago at 04:00" = "2009-12-31 16:00:00",
     "12 hours ago at today" = "2009-12-31 12:00:00",
     "12 hours ago at 7 days ago" = "2009-12-24 12:00:00",
-    "7 days ago at 7 days ago" = "2009-12-18 00:00:00"
+    "7 days ago at 7 days ago" = "2009-12-18 00:00:00",
+    "2007-08-31T16:47+00:00" = "2007-08-31 16:47:00",
+    "2007-12-24T18:21Z" = "2007-12-24 18:21:00",
+    "2008-02-01T09:00:22+05" = "2008-02-01 04:00:22",
+    "2009-01-01T12:00:00+01:00" = "2009-01-01 11:00:00",
+    "2009-06-30T18:30:00+02:00" = "2009-06-30 16:30:00",
+    "2010-01-01T12:00:00.001+01:00" = "2010-01-01 11:00:00.001"
 );
 
 generate_test_cases_error!("2023-11-31");
