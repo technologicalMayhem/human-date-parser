@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support for ISO 8601 timestamps
+
+### Changed
+
+- Strings are now matched exactly. If there are any characters that cannot be matched, the entire string will be rejected.
+
 ## [0.3.1]
 
 ### Changed
