@@ -39,7 +39,7 @@ Overmorrow = { "overmorrow" }
 Time = ${ 
     | Num ~ ( ":" ~ Num ){1,2}
 }
-IsoTime = { Num ~ ( ":" ~ Num ){1,2} ~ ("." ~ NumNanosecond)? ~ TzSpecifier? }
+IsoTime = { Num ~ ( ":" ~ Num ){0,2} ~ ("." ~ NumNanosecond)? ~ TzSpecifier? }
 NumNanosecond = @{ ASCII_DIGIT+ }
 TzSpecifier = { ( TzDirection ) ~ ( Num ~ (":" ~ Num)? ) | "z" }
 TzDirection = { "+" | "-" }

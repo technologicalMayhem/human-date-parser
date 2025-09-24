@@ -3,7 +3,14 @@ use std::{env::args, fs::read_to_string};
 use chrono::Local;
 use human_date_parser::ParseResult;
 
+const RED: &str = "\x1B[31m";
+const GREEN: &str = "\x1B[32m";
+const RESET: &str = "\x1B[0m";
+
 fn main() {
+    let now = Local::now().naive_local();
+    println!("Now: {now}\n");
+
     let path = args().skip(1).next().expect("No file given");
     let lines: Vec<String> = read_to_string(path)
         .unwrap()
@@ -12,27 +19,23 @@ fn main() {
         .map(remove_comments)
         .collect();
     for line in lines {
-        println!("Input: {line}");
-        let now = Local::now().naive_local();
+        print!("{line}");
         let result = match human_date_parser::from_human_time(&line, now) {
             Ok(time) => time,
             Err(e) => {
-                println!("{e}");
+                println!(" -> {RED}{e}{RESET}");
                 continue;
             }
         };
 
-        let now = Local::now();
-
+        print!(" -> {GREEN}");
         match result {
-            ParseResult::DateTime(datetime) => {
-                println!("Time now: {now}");
-                println!("Time then: {datetime}\n");
-            }
-            ParseResult::Date(date) => println!("Date: {date}\n"),
-            ParseResult::Time(time) => println!("Time: {time}\n"),
-            ParseResult::DateTimeTz(date_time) => println!("Time: {date_time}"),
+            ParseResult::DateTime(datetime) => print!("Datetime: {datetime}"),
+            ParseResult::Date(date) => print!("Date: {date}\n"),
+            ParseResult::Time(time) => print!("Time: {time}\n"),
+            ParseResult::DateTimeTz(date_time) => print!("Datetime: {date_time}"),
         };
+        println!("{RESET}");
     }
 }
 
