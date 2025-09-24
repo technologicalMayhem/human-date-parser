@@ -31,8 +31,8 @@ fn main() {
         print!(" -> {GREEN}");
         match result {
             ParseResult::DateTime(datetime) => print!("Datetime: {datetime}"),
-            ParseResult::Date(date) => print!("Date: {date}\n"),
-            ParseResult::Time(time) => print!("Time: {time}\n"),
+            ParseResult::Date(date) => print!("Date: {date}"),
+            ParseResult::Time(time) => print!("Time: {time}"),
             ParseResult::DateTimeTz(date_time) => print!("Datetime: {date_time}"),
         };
         println!("{RESET}");
