@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Strings are now matched exactly. If there are any characters that cannot be matched, the entire string will be rejected.
+- Strings are now matched exactly. If there are any characters that cannot be matched, the entire string will be rejected. White spaces at the start or end are ignored.
 
 ## [0.3.1]
 
